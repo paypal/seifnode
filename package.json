@@ -1,0 +1,19 @@
+{
+  "name": "seifnode",
+  "version": "0.0.0",
+  "description": "Node.js Implementation of SEIF protocol helper modules",
+  "main": "index.js",
+  "private": true,
+  "scripts": {
+  	"preinstall": "bash installrng.sh",
+    "test": "mocha"
+  },
+  "dependencies": {
+    "nan": "*"
+  },
+  "devDependencies": {
+    "glob": "*",
+    "mocha": "*"  
+  },
+  "gypfile": true
+}

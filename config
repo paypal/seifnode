@@ -1,0 +1,7 @@
+#OpenCV_DIR="C:\opencv\build\x64\vc12\lib"
+#OpenCV_INCLUDE_DIR="C:\opencv\build\include"
+#PORTAUDIO_INCLUDE_DIR="C:\portaudio\include"
+#PORTAUDIO_LIBRARY_DIR="C:\portaudio\build\msvc\x64\Release"
+#CRYPTO++_INCLUDE_DIR="C:\cryptopp562"
+#CRYPTO++_LIBRARIES_DIR="C:\cryptopp562\x64\Output\Release"
+#CMAKE_GENERATOR="Visual Studio 14 2015 Win64"
