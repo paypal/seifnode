@@ -28,7 +28,7 @@ Requirements
 Test
 ====
 
-Please refer to the "test" directory to view the "mocha" unit tests. To run the tests, pleae run the following command from the top-level directory.
+Please refer to the "test" directory to view the "mocha" unit tests. To run the tests, please run the following command from the top-level directory.
 
 ```
 $ npm test
