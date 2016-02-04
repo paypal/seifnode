@@ -34,6 +34,7 @@
 #include <iostream>
 #include <string>
 #include <exception>
+#include <mutex>
 
 // ----------------------
 // node.js addon includes
@@ -99,8 +100,9 @@ namespace {
 // javascript object constructor
 Nan::Persistent<v8::Function> ECCISAAC::constructor;
 
-// global Isaac RNG object 
+// global Isaac RNG object and mutex to protect it 
 IsaacRandomPool g_PRNG;
+std::mutex g_mtx; 
 
 
 // Helper functions for printing the public and private keys.
@@ -211,10 +213,15 @@ void PrintPublicKey(const DL_PublicKey_EC<ECP>& key, std::ostream& out)
  *
  * @param initCallback callback to be invoked after async 
  *        operation 
- * @param obj ECCISAAC object ptr to access object in thread
+ * @param key disk access key for public/private keys and 
+ *        rng state 
+ * @param folderPath folder containing keys and rng state files
  */
-ECCISAAC::Worker::Worker(Nan::Callback* initCallback, ECCISAAC* obj): 
-    Nan::AsyncWorker(initCallback), _obj(obj) {
+ECCISAAC::Worker::Worker(
+    Nan::Callback* initCallback, 
+    const std::vector<uint8_t>& key, 
+    const std::string& folderPath
+): Nan::AsyncWorker(initCallback), _wkey(key), _wfolderPath(folderPath) {
 
 }
 
@@ -324,7 +331,12 @@ void ECCISAAC::Worker::Execute() {
                     
     try {
         // Try to load keys from the disk into the string arguments.
-        _status = _obj->loadKeys(_encodedPub, _encodedPriv);
+        _status = ECCISAAC::loadKeys(
+            _encodedPub, 
+            _encodedPriv, 
+            _wkey, 
+            _wfolderPath
+        );
         
         if (_status == STATUS::SUCCESS) {
             return;
@@ -359,8 +371,11 @@ void ECCISAAC::Worker::Execute() {
  * @param keyData byte vector corresponding to disk access key 
  * @param folderPath folder containing the encrypted keys
  */
-ECCISAAC::ECCISAAC(const std::vector<uint8_t>& keyData, 
-    const std::string& folderPath): _key(keyData), _folderPath(folderPath) {
+ECCISAAC::ECCISAAC(
+    const std::vector<uint8_t>& keyData, 
+    const std::string& folderPath
+): _key(keyData), _folderPath(folderPath) {
+
 }
 
 
@@ -372,25 +387,33 @@ ECCISAAC::ECCISAAC(const std::vector<uint8_t>& keyData,
  * @brief Encrypt and save the private key to the disk with the given 
  *        file name.
  *
- * @param key private key object
+ * @param privateKey private key object
  * @param file file name of encrypted private key
+ * @param key disk access key for public/private keys and 
+ *        rng state 
+ * @param folderPath folder containing keys and rng state files
  *
  * @return void
  */
-void ECCISAAC::SavePrivateKey(const PrivateKey& key, const std::string& file)
+void ECCISAAC::SavePrivateKey(
+    const PrivateKey& privateKey, 
+    const std::string& file, 
+    const std::vector<uint8_t>& key, 
+    const std::string& folderPath
+)
 {
     // Create file encryptor object.
-    FileCryptopp fileEncryptor(_folderPath + file);
+    FileCryptopp fileEncryptor(folderPath + file);
 
     // Save the private key into a string using CryptoPP StringSink.
     std::string keyStr;
     StringSink keySink(keyStr);
 
-    key.Save(keySink);
+    privateKey.Save(keySink);
 
     // Write the string form of the private key to the file.
     std::stringstream fss(keyStr);
-    fileEncryptor.writeFile(fss, _key);
+    fileEncryptor.writeFile(fss, key);
 }
 
 
@@ -401,25 +424,33 @@ void ECCISAAC::SavePrivateKey(const PrivateKey& key, const std::string& file)
  * @brief Encrypt and save the public key to the disk with the given 
  *        file name.
  *
- * @param key public key object
+ * @param publicKey public key object
  * @param file file name of encrypted public key
+ * @param key disk access key for public/private keys and 
+ *        rng state 
+ * @param folderPath folder containing keys and rng state files
  *
  * @return void
  */
-void ECCISAAC::SavePublicKey(const PublicKey& key, const std::string& file)
+void ECCISAAC::SavePublicKey(
+    const PublicKey& publicKey, 
+    const std::string& file, 
+    const std::vector<uint8_t>& key, 
+    const std::string& folderPath
+)
 {
     // Create file encryptor object.
-    FileCryptopp fileEncryptor(_folderPath + file);
+    FileCryptopp fileEncryptor(folderPath + file);
 
     // Save the public key into a string using CryptoPP StringSink.
     std::string keyStr;
     StringSink keySink(keyStr);
 
-    key.Save(keySink);
+    publicKey.Save(keySink);
 
     // Write the string form of the public key to the file.
     std::stringstream fss(keyStr);
-    fileEncryptor.writeFile(fss, _key);
+    fileEncryptor.writeFile(fss, key);
 }
 
 
@@ -431,16 +462,23 @@ void ECCISAAC::SavePublicKey(const PublicKey& key, const std::string& file)
  * @brief Decrypt the file with the given name and load it as the 
  *        private key.
  *
- * @param key private key object
+ * @param privateKey private key object
  * @param file file name of encrypted private key
+ * @param key disk access key for public/private keys and 
+ *        rng state 
+ * @param folderPath folder containing keys and rng state files
  *
  * @return status code indicating success or cause of error
  */
-ECCISAAC::STATUS ECCISAAC::LoadPrivateKey(PrivateKey& key, 
-    const std::string& file) {
-
+ECCISAAC::STATUS ECCISAAC::LoadPrivateKey(
+    PrivateKey& privateKey, 
+    const std::string& file, 
+    const std::vector<uint8_t>& key, 
+    const std::string& folderPath
+) 
+{
     // Create file decryptor object.
-    FileCryptopp fileDecryptor(_folderPath + file);
+    FileCryptopp fileDecryptor(folderPath + file);
 
     // If private key file does not exist then return appropriate error.
     if (!fileDecryptor.fileExists()) {
@@ -449,7 +487,7 @@ ECCISAAC::STATUS ECCISAAC::LoadPrivateKey(PrivateKey& key,
 
     // Read the encrypted file to get the private key string.
     std::stringstream fss;
-    if (!fileDecryptor.readFile(fss, _key)) {
+    if (!fileDecryptor.readFile(fss, key)) {
         // If decryption fails return an error.
         return ECCISAAC::STATUS::DECRYPTION_ERROR;
     }
@@ -459,7 +497,7 @@ ECCISAAC::STATUS ECCISAAC::LoadPrivateKey(PrivateKey& key,
     // Use CryptoPP StringSource to get the private key object from the string.
     StringSource keySource(keyStr, true);
 
-    key.Load(keySource);
+    privateKey.Load(keySource);
 
     return ECCISAAC::STATUS::SUCCESS;
 }
@@ -472,16 +510,23 @@ ECCISAAC::STATUS ECCISAAC::LoadPrivateKey(PrivateKey& key,
  * @brief Decrypt the file with the given name and load it as the 
  *        public key.
  *
- * @param key public key object
+ * @param publicKey public key object
  * @param file file name of encrypted public key
+ * @param key disk access key for public/private keys and 
+ *        rng state 
+ * @param folderPath folder containing keys and rng state files
  *
  * @return status code indicating success or cause of error
  */
-ECCISAAC::STATUS ECCISAAC::LoadPublicKey(PublicKey& key, 
-    const std::string& file) {
-
+ECCISAAC::STATUS ECCISAAC::LoadPublicKey(
+    PublicKey& publicKey, 
+    const std::string& file, 
+    const std::vector<uint8_t>& key, 
+    const std::string& folderPath
+) 
+{
     // Create file decryptor object.
-    FileCryptopp fileDecryptor(_folderPath + file);
+    FileCryptopp fileDecryptor(folderPath + file);
 
     // If public key file does not exist then return appropriate error.
     if (!fileDecryptor.fileExists()) {
@@ -490,7 +535,7 @@ ECCISAAC::STATUS ECCISAAC::LoadPublicKey(PublicKey& key,
 
     // Read the encrypted file to get the public key string.
     std::stringstream fss;
-    if (!fileDecryptor.readFile(fss, _key)) {
+    if (!fileDecryptor.readFile(fss, key)) {
         // If decryption fails return an error.
         return ECCISAAC::STATUS::DECRYPTION_ERROR;
     }
@@ -500,7 +545,7 @@ ECCISAAC::STATUS ECCISAAC::LoadPublicKey(PublicKey& key,
     // Use CryptoPP StringSource to get the public key object from the string.
     StringSource keySource(keyStr, true);
     
-    key.Load(keySource);
+    publicKey.Load(keySource);
 
     return ECCISAAC::STATUS::SUCCESS;
 }
@@ -516,18 +561,26 @@ ECCISAAC::STATUS ECCISAAC::LoadPublicKey(PublicKey& key,
  *
  * @param encodedPub public key to be loaded from encrypted file
  * @param encodedPriv private key to be loaded from encrypted file
+ * @param key disk access key for public/private keys and 
+ *        rng state 
+ * @param folderPath folder containing keys and rng state files
  *
  * @return status code indicating success or cause of error
  */
-ECCISAAC::STATUS ECCISAAC::loadKeys(std::string& encodedPub, 
-    std::string& encodedPriv) {
-
+ECCISAAC::STATUS ECCISAAC::loadKeys(
+    std::string& encodedPub, 
+    std::string& encodedPriv, 
+    const std::vector<uint8_t>& key, 
+    const std::string& folderPath
+) 
+{
     // ECC Decryption object containing the private key.
     ECIES<ECP>::Decryptor d0;
     
     // Load the private key from encrypted file on disk.
     ECCISAAC::STATUS rc;
-    if ((rc = LoadPrivateKey(d0.AccessPrivateKey(), PRIV_KEY_FILE_NAME)) 
+    if ((rc = LoadPrivateKey(d0.AccessPrivateKey(), PRIV_KEY_FILE_NAME, 
+                             key, folderPath)) 
         != ECCISAAC::STATUS::SUCCESS) {
         /* If loading the key fails return the error which could be due to 
          * the file not being present on the disk or due to a decryption error.
@@ -539,7 +592,8 @@ ECCISAAC::STATUS ECCISAAC::loadKeys(std::string& encodedPub,
     ECIES<ECP>::Encryptor e0;
 
     // Load the public key from encrypted file on disk.
-    if ((rc = LoadPublicKey(e0.AccessPublicKey(), PUB_KEY_FILE_NAME)) 
+    if ((rc = LoadPublicKey(e0.AccessPublicKey(), PUB_KEY_FILE_NAME, 
+                            key, folderPath)) 
         != ECCISAAC::STATUS::SUCCESS) {
         /* If loading the key fails return the error which could be due to 
          * the file not being present on the disk or due to a decryption error.
@@ -565,14 +619,17 @@ ECCISAAC::STATUS ECCISAAC::loadKeys(std::string& encodedPub,
     // Hash the hex encoded private key string using CryptoPP SHA3_256.
     std::vector<uint8_t> digest(CryptoPP::SHA3_256::DIGESTSIZE);
     hashString(digest, encodedPriv);
-
+    
     // Using the default file name for the RNG saved state.
     std::string fileName = RNG_STATE_FILE_NAME;
 
-    std::string fileId = _folderPath + fileName;
+    std::string fileId = folderPath + fileName;
 
     // Check if the isaac RNG has saved state on the disk.
+    g_mtx.lock();
     IsaacRandomPool::STATUS status = g_PRNG.IsInitialized(fileId, digest);
+    g_mtx.unlock();
+
     if (status != IsaacRandomPool::STATUS::SUCCESS) {
         return ECCISAAC::STATUS::RNG_INIT_ERROR;
     }
@@ -590,16 +647,23 @@ ECCISAAC::STATUS ECCISAAC::loadKeys(std::string& encodedPub,
  *
  * @param encodedPub public key to be generated
  * @param encodedPriv private key to be generated
+ * @param key disk access key for public/private keys and 
+ *        rng state 
+ * @param folderPath folder containing keys and rng state files
  *
  * @return boolean indicating success/failure
  */
-bool ECCISAAC::generateKeys(std::string& encodedPub, 
-    std::string& encodedPriv) {
-
+bool ECCISAAC::generateKeys(
+    std::string& encodedPub, 
+    std::string& encodedPriv, 
+    const std::vector<uint8_t>& key, 
+    const std::string& folderPath
+) 
+{
     // Using the default file name for the RNG saved state.
     std::string fileName = RNG_STATE_FILE_NAME;
 
-    std::string fileId = _folderPath + fileName;
+    std::string fileId = folderPath + fileName;
     
     /* Initialize the global Isaac rng object and check if 
      * initialization succeeded. if it fails, increase the multiplier argument 
@@ -638,8 +702,8 @@ bool ECCISAAC::generateKeys(std::string& encodedPub,
     try {
         d0.GetPrivateKey().ThrowIfInvalid(g_PRNG, 3);
         e0.GetPublicKey().ThrowIfInvalid(g_PRNG, 3);
-        SavePrivateKey(d0.GetPrivateKey(), PRIV_KEY_FILE_NAME);
-        SavePublicKey(e0.GetPublicKey(), PUB_KEY_FILE_NAME);
+        SavePrivateKey(d0.GetPrivateKey(), PRIV_KEY_FILE_NAME, key, folderPath);
+        SavePublicKey(e0.GetPublicKey(), PUB_KEY_FILE_NAME, key, folderPath);
     } catch (...) {
         return false;
     }
@@ -660,7 +724,7 @@ bool ECCISAAC::generateKeys(std::string& encodedPub,
     // Hash the private key string using CryptoPP SHA3-256.
     std::vector<uint8_t> digest(CryptoPP::SHA3_256::DIGESTSIZE);
     hashString(digest, encodedPriv);
-
+    
     // Set the above hash as the AES key of the RNG state saved to disk.
     g_PRNG.InitializeEncryption(digest);
 
@@ -796,7 +860,7 @@ NAN_METHOD(ECCISAAC::loadKeys) {
     Nan::Callback *callback = new Nan::Callback(info[0].As<v8::Function>());
 
     // Initialize the async worker and queue it.
-    Worker* worker = new Worker(callback, obj);
+    Worker* worker = new Worker(callback, obj->_key, obj->_folderPath);
 
     Nan::AsyncQueueWorker(worker);
 }
@@ -826,7 +890,13 @@ NAN_METHOD(ECCISAAC::generateKeys) {
 
     // Generate the public and private keys as strings and save them to disk.
     std::string encodedPub, encodedPriv;
-    if (!obj->generateKeys(encodedPub, encodedPriv)) {
+    if (!obj->generateKeys(
+            encodedPub, 
+            encodedPriv, 
+            obj->_key, 
+            obj->_folderPath
+        )
+    ) {
 
         return;
     }
@@ -1047,7 +1117,7 @@ void ECCISAAC::Init(v8::Handle<v8::Object> exports) {
     // Prepare constructor template.
     v8::Local<v8::FunctionTemplate> tpl = Nan::New<v8::FunctionTemplate>(New);
     tpl->SetClassName(Nan::New("ECCISAAC").ToLocalChecked());
-    tpl->InstanceTemplate()->SetInternalFieldCount(3);
+    tpl->InstanceTemplate()->SetInternalFieldCount(4);
 
     // Prototype
     Nan::SetPrototypeMethod(tpl, "loadKeys", loadKeys);

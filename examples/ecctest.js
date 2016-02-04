@@ -13,7 +13,7 @@ console.log(keys);
 
 console.log("DONE2");
 
-var msg = "shit shit jsekde \u00001dededer\u4589r\u4858g4hb";
+var msg = "jsekde \u00001dededer\u4589r\u4858g4hb";
 var msg1 = new Buffer([0x41,0x41,0x41,0x41,0x41,0x41,0x41,0x41,0x41,0x41,0x41,0x41,0x41,0x41,0x41,0x41]);
 console.log(msg1);
 var d = test.encrypt(keys.enc, msg1);
@@ -26,25 +26,6 @@ console.log(m);
 
 var n = new Buffer(m, 'binary');
 console.log(n);
-
-// if (m === msg) {
-// 	console.log("YESSSSSSSSSS");
-// 	console.log(m.length);
-// }
-// else {
-// 	console.log("NOOOOOOOOOOO");
-// }
-
-
-// msg = "djrmokro depdelde deofrfor";
-
-// d = test.encrypt(keys.enc, msg);
-
-// console.log(d);
-
-// m = test.decrypt(keys.dec, d);
-
-// console.log(m);
 
 
 

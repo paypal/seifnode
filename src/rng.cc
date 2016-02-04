@@ -35,7 +35,8 @@
 #include <iostream>
 #include <string>
 #include <vector>
- #include <exception>
+#include <exception>
+#include <mutex>
 
 // ----------------------
 // node.js addon includes
@@ -63,6 +64,7 @@ Nan::Persistent<v8::Function> RNG::constructor;
 
 // global Isaac RNG object 
 IsaacRandomPool l_PRNG;
+std::mutex l_mtx;
 
 
 // -----------
@@ -160,7 +162,9 @@ void RNG::Worker::HandleErrorCallback () {
  */
 void RNG::Worker::Execute() {
     // Check if the RNG has state on disk and is initialized in memory.
+    l_mtx.lock();
     _result = l_PRNG.IsInitialized(_fileId, _digest);
+    l_mtx.unlock();
     
     if (_result == IsaacRandomPool::STATUS::SUCCESS) {
         return;
