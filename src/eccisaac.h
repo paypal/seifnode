@@ -109,8 +109,11 @@ class ECCISAAC : public Nan::ObjectWrap {
 		    	// ----
 				// data
 				// ----
-				//ECCISAAC object ptr to access object in thread
-		        ECCISAAC* _obj; 
+
+				// folder containing keys and rng state files
+		        std::string _wfolderPath;
+		        // disk access key for public/private keys and rng state 
+		        std::vector<uint8_t> _wkey;
 		        // status of loading keys
 		        ECCISAAC::STATUS _status; 
 		        // encoded public key 
@@ -128,9 +131,16 @@ class ECCISAAC : public Nan::ObjectWrap {
 				 *
 				 * @param initCallback callback to be invoked after async 
 				 *		  operation 
-				 * @param obj ECCISAAC object ptr to access object in thread
+				 * @param key disk access key for public/private keys and 
+				 * 		  rng state 
+				 * @param folderPath folder containing keys and rng state files
 				 */
-		        Worker(Nan::Callback* initCallback, ECCISAAC* obj);
+		        // Worker(Nan::Callback* initCallback, ECCISAAC* obj);
+				Worker(
+					Nan::Callback* initCallback, 
+					const std::vector<uint8_t>& key, 
+					const std::string& folderPath
+				);	
 
 
 		        // ----------------
@@ -204,12 +214,20 @@ class ECCISAAC : public Nan::ObjectWrap {
 		 * @brief Encrypt and save the private key to the disk with the given 
 		 *		  file name.
 		 *
-		 * @param key private key object
+		 * @param privateKey private key object
 		 * @param file file name of encrypted private key
+		 * @param key disk access key for public/private keys and 
+		 * 		  rng state 
+		 * @param folderPath folder containing keys and rng state files
 		 *
 		 * @return void
 		 */
-		void SavePrivateKey(const PrivateKey& key, const std::string& file);
+		static void SavePrivateKey(
+			const PrivateKey& privateKey, 
+			const std::string& file, 
+			const std::vector<uint8_t>& key, 
+			const std::string& folderPath
+		);
 
 
 		// -------------
@@ -219,12 +237,20 @@ class ECCISAAC : public Nan::ObjectWrap {
 		 * @brief Encrypt and save the public key to the disk with the given 
 		 *		  file name.
 		 *
-		 * @param key public key object
+		 * @param publicKey public key object
 		 * @param file file name of encrypted public key
+		 * @param key disk access key for public/private keys and 
+		 * 		  rng state 
+		 * @param folderPath folder containing keys and rng state files
 		 *
 		 * @return void
 		 */
-		void SavePublicKey(const PublicKey& key, const std::string& file);
+		static void SavePublicKey(
+			const PublicKey& publicKey, 
+			const std::string& file, 
+			const std::vector<uint8_t>& key, 
+			const std::string& folderPath
+		);
 
 
 		// --------------
@@ -236,11 +262,18 @@ class ECCISAAC : public Nan::ObjectWrap {
 		 *
 		 * @param key private key object
 		 * @param file file name of encrypted private key
+		 * @param key disk access key for public/private keys and 
+		 * 		  rng state 
+		 * @param folderPath folder containing keys and rng state files
 		 *
 		 * @return status code indicating success or cause of error
 		 */
-		STATUS LoadPrivateKey(PrivateKey& key, 
-			const std::string& file);
+		static STATUS LoadPrivateKey(
+			PrivateKey& privateKey, 
+			const std::string& file, 
+			const std::vector<uint8_t>& key, 
+			const std::string& folderPath
+		);
 
 
 		// -------------
@@ -252,11 +285,18 @@ class ECCISAAC : public Nan::ObjectWrap {
 		 *
 		 * @param key public key object
 		 * @param file file name of encrypted public key
+		 * @param key disk access key for public/private keys and 
+		 * 		  rng state 
+		 * @param folderPath folder containing keys and rng state files
 		 *
 		 * @return status code indicating success or cause of error
 		 */
-		STATUS LoadPublicKey(PublicKey& key, 
-			const std::string& file);
+		static STATUS LoadPublicKey(
+			PublicKey& publicKey, 
+			const std::string& file, 
+			const std::vector<uint8_t>& key, 
+			const std::string& folderPath
+		);
 
 
 		// --------
@@ -268,10 +308,18 @@ class ECCISAAC : public Nan::ObjectWrap {
 		 *
 		 * @param encodedPub public key to be loaded from encrypted file
 		 * @param encodedPriv private key to be loaded from encrypted file
+		 * @param key disk access key for public/private keys and 
+		 * 		  rng state 
+		 * @param folderPath folder containing keys and rng state files
 		 *
 		 * @return status code indicating success or cause of error
 		 */
-		STATUS loadKeys(std::string& encodedPub, std::string& encodedPriv);
+		static STATUS loadKeys(
+			std::string& encodedPub, 
+			std::string& encodedPriv, 
+			const std::vector<uint8_t>& key, 
+			const std::string& folderPath
+		);
 
 
 		// ------------
@@ -283,10 +331,18 @@ class ECCISAAC : public Nan::ObjectWrap {
 		 *
 		 * @param encodedPub public key to be generated
 		 * @param encodedPriv private key to be generated
+		 * @param key disk access key for public/private keys and 
+		 * 		  rng state 
+		 * @param folderPath folder containing keys and rng state files
 		 *
 		 * @return boolean indicating success/failure
 		 */
-		bool generateKeys(std::string& encodedPub, std::string& encodedPriv);
+		static bool generateKeys(
+			std::string& encodedPub, 
+			std::string& encodedPriv, 
+			const std::vector<uint8_t>& key, 
+    		const std::string& folderPath
+    	);
 
 
 
