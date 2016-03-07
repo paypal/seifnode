@@ -71,6 +71,9 @@ class RNG : public Nan::ObjectWrap {
 		// javascript object constructor
 		static Nan::Persistent<v8::Function> constructor;
 
+		// isaac RNG object
+		IsaacRandomPool prng;
+
 		// ------
 		// Worker
 		// ------
@@ -85,6 +88,8 @@ class RNG : public Nan::ObjectWrap {
 		    	// ----
 				// data
 				// ----
+				// pointer to isaac RNG object
+				IsaacRandomPool* _prng;
 				// file identifier of RNG state on disk
 		        std::string _fileId; 
 		        // key used to encrypt/decrypt RNG state on disk
@@ -102,10 +107,13 @@ class RNG : public Nan::ObjectWrap {
 				 *
 				 * @param initCallback callback to be invoked after async 
 				 *		  operation 
+				 * @param prng isaac RNG object pointer
 				 * @param fileId file identifier of RNG state on disk
 				 * @param digest key used to encrypt/decrypt RNG state on disk
 				 */
-		        Worker(Nan::Callback* initCallback, const std::string& fileId, 
+		        Worker(Nan::Callback* initCallback, 
+		        	IsaacRandomPool* prng,
+		        	const std::string& fileId, 
             		const std::vector<uint8_t>& digest);
 
 

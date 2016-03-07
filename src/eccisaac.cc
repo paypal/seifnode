@@ -82,8 +82,6 @@ using CryptoPP::SHA3_256;
 // ----------------
 // library includes
 // ----------------
-#include <isaacRandomPool.h>
-
 #include "eccisaac.h"
 #include "util.h"
 
@@ -98,12 +96,7 @@ namespace {
 }
 
 // javascript object constructor
-Nan::Persistent<v8::Function> ECCISAAC::constructor;
-
-// global Isaac RNG object and mutex to protect it 
-IsaacRandomPool g_PRNG;
-std::mutex g_mtx; 
-
+Nan::Persistent<v8::Function> ECCISAAC::constructor; 
 
 // Helper functions for printing the public and private keys.
 void PrintPrivateKey(const DL_PrivateKey_EC<ECP>& key, 
@@ -213,15 +206,20 @@ void PrintPublicKey(const DL_PublicKey_EC<ECP>& key, std::ostream& out)
  *
  * @param initCallback callback to be invoked after async 
  *        operation 
+ * @param prng isaac rng object pointer 
  * @param key disk access key for public/private keys and 
  *        rng state 
  * @param folderPath folder containing keys and rng state files
  */
 ECCISAAC::Worker::Worker(
     Nan::Callback* initCallback, 
+    IsaacRandomPool* prng,
     const std::vector<uint8_t>& key, 
     const std::string& folderPath
-): Nan::AsyncWorker(initCallback), _wkey(key), _wfolderPath(folderPath) {
+): Nan::AsyncWorker(initCallback), 
+_wprng(prng),  
+_wfolderPath(folderPath),
+_wkey(key) {
 
 }
 
@@ -334,6 +332,7 @@ void ECCISAAC::Worker::Execute() {
         _status = ECCISAAC::loadKeys(
             _encodedPub, 
             _encodedPriv, 
+            *(_wprng),
             _wkey, 
             _wfolderPath
         );
@@ -561,6 +560,7 @@ ECCISAAC::STATUS ECCISAAC::LoadPublicKey(
  *
  * @param encodedPub public key to be loaded from encrypted file
  * @param encodedPriv private key to be loaded from encrypted file
+ * @param prng isaac rng object reference 
  * @param key disk access key for public/private keys and 
  *        rng state 
  * @param folderPath folder containing keys and rng state files
@@ -570,6 +570,7 @@ ECCISAAC::STATUS ECCISAAC::LoadPublicKey(
 ECCISAAC::STATUS ECCISAAC::loadKeys(
     std::string& encodedPub, 
     std::string& encodedPriv, 
+    IsaacRandomPool& prng,
     const std::vector<uint8_t>& key, 
     const std::string& folderPath
 ) 
@@ -626,9 +627,7 @@ ECCISAAC::STATUS ECCISAAC::loadKeys(
     std::string fileId = folderPath + fileName;
 
     // Check if the isaac RNG has saved state on the disk.
-    g_mtx.lock();
-    IsaacRandomPool::STATUS status = g_PRNG.IsInitialized(fileId, digest);
-    g_mtx.unlock();
+    IsaacRandomPool::STATUS status = prng.IsInitialized(fileId, digest);
 
     if (status != IsaacRandomPool::STATUS::SUCCESS) {
         return ECCISAAC::STATUS::RNG_INIT_ERROR;
@@ -647,6 +646,7 @@ ECCISAAC::STATUS ECCISAAC::loadKeys(
  *
  * @param encodedPub public key to be generated
  * @param encodedPriv private key to be generated
+ * @param prng isaac rng object reference 
  * @param key disk access key for public/private keys and 
  *        rng state 
  * @param folderPath folder containing keys and rng state files
@@ -656,6 +656,7 @@ ECCISAAC::STATUS ECCISAAC::loadKeys(
 bool ECCISAAC::generateKeys(
     std::string& encodedPub, 
     std::string& encodedPriv, 
+    IsaacRandomPool& prng,
     const std::vector<uint8_t>& key, 
     const std::string& folderPath
 ) 
@@ -673,7 +674,7 @@ bool ECCISAAC::generateKeys(
 
     try {
         for (; multiplier < 6; ++multiplier) {
-            if (g_PRNG.Initialize(fileId, multiplier)) {
+            if (prng.Initialize(fileId, multiplier)) {
                 break;
             }
         }
@@ -691,7 +692,7 @@ bool ECCISAAC::generateKeys(
     }
 
     // ECC Decryption object created using our Isaac RNG and secp521r1 curve.
-    ECIES<ECP>::Decryptor d0(g_PRNG, CryptoPP::ASN1::secp521r1());
+    ECIES<ECP>::Decryptor d0(prng, CryptoPP::ASN1::secp521r1());
 
     // ECC Encryption object corresponding to the above decryptor object.
     ECIES<ECP>::Encryptor e0(d0);
@@ -700,8 +701,8 @@ bool ECCISAAC::generateKeys(
      * save them to encrypted files on the disk in the given folder.
      */
     try {
-        d0.GetPrivateKey().ThrowIfInvalid(g_PRNG, 3);
-        e0.GetPublicKey().ThrowIfInvalid(g_PRNG, 3);
+        d0.GetPrivateKey().ThrowIfInvalid(prng, 3);
+        e0.GetPublicKey().ThrowIfInvalid(prng, 3);
         SavePrivateKey(d0.GetPrivateKey(), PRIV_KEY_FILE_NAME, key, folderPath);
         SavePublicKey(e0.GetPublicKey(), PUB_KEY_FILE_NAME, key, folderPath);
     } catch (...) {
@@ -726,7 +727,7 @@ bool ECCISAAC::generateKeys(
     hashString(digest, encodedPriv);
     
     // Set the above hash as the AES key of the RNG state saved to disk.
-    g_PRNG.InitializeEncryption(digest);
+    prng.InitializeEncryption(digest);
 
     return true;
 }
@@ -860,7 +861,7 @@ NAN_METHOD(ECCISAAC::loadKeys) {
     Nan::Callback *callback = new Nan::Callback(info[0].As<v8::Function>());
 
     // Initialize the async worker and queue it.
-    Worker* worker = new Worker(callback, obj->_key, obj->_folderPath);
+    Worker* worker = new Worker(callback, &obj->_prng, obj->_key, obj->_folderPath);
 
     Nan::AsyncQueueWorker(worker);
 }
@@ -892,7 +893,8 @@ NAN_METHOD(ECCISAAC::generateKeys) {
     std::string encodedPub, encodedPriv;
     if (!obj->generateKeys(
             encodedPub, 
-            encodedPriv, 
+            encodedPriv,
+            obj->_prng, 
             obj->_key, 
             obj->_folderPath
         )
@@ -949,6 +951,8 @@ NAN_METHOD(ECCISAAC::encrypt) {
         Nan::ThrowError("Incorrect Arguments. Message buffer not provided");
         return;
     }
+
+    ECCISAAC* obj = ObjectWrap::Unwrap<ECCISAAC>(info.Holder());
     
     // Unwrap the first argument to get the hex encoded public key string.
     v8::String::Utf8Value str(info[0]->ToString());
@@ -984,7 +988,7 @@ NAN_METHOD(ECCISAAC::encrypt) {
          */
         std::string em0;
         ArraySource ss1 (messageData, messageLength, true, 
-            new PK_EncryptorFilter(g_PRNG, e1, new StringSink(em0) ) );
+            new PK_EncryptorFilter(obj->_prng, e1, new StringSink(em0) ) );
 
         // Hex encode the string cipher using CryptoPP StringSource & HexEncoder
         StringSource ss6(em0, true, 
@@ -1036,6 +1040,8 @@ NAN_METHOD(ECCISAAC::decrypt) {
         return;
     }
 
+    ECCISAAC* obj = ObjectWrap::Unwrap<ECCISAAC>(info.Holder());
+
     // Unwrap the first argument to get the hex encoded private key string.
     v8::String::Utf8Value str(info[0]->ToString());
     std::string privStr(*str);
@@ -1075,7 +1081,7 @@ NAN_METHOD(ECCISAAC::decrypt) {
          * cipher string and store the result in a string using StringSource.
          */
         StringSource ss2 (em0, true, 
-            new PK_DecryptorFilter(g_PRNG, d1, new StringSink(dm0) ) );
+            new PK_DecryptorFilter(obj->_prng, d1, new StringSink(dm0) ) );
 
     } catch (const std::exception& ex) {
 
@@ -1097,6 +1103,24 @@ NAN_METHOD(ECCISAAC::decrypt) {
 }
 
 
+// -------
+// destroy
+// -------
+/**
+ * @brief Destroys the underlying ECCISAAC object which in turn 
+ *        destroys the isaac RNG object thus saving the state to disk.
+ *        
+ * Invoked as:
+ * 'obj.destroy()' 
+ *
+ * @return void
+ */
+NAN_METHOD(ECCISAAC::destroy) {
+
+    ECCISAAC* obj = ObjectWrap::Unwrap<ECCISAAC>(info.Holder());
+
+    obj->_prng.Destroy();
+}
 
 
 // ----
@@ -1117,13 +1141,14 @@ void ECCISAAC::Init(v8::Handle<v8::Object> exports) {
     // Prepare constructor template.
     v8::Local<v8::FunctionTemplate> tpl = Nan::New<v8::FunctionTemplate>(New);
     tpl->SetClassName(Nan::New("ECCISAAC").ToLocalChecked());
-    tpl->InstanceTemplate()->SetInternalFieldCount(4);
+    tpl->InstanceTemplate()->SetInternalFieldCount(5);
 
     // Prototype
     Nan::SetPrototypeMethod(tpl, "loadKeys", loadKeys);
     Nan::SetPrototypeMethod(tpl, "generateKeys", generateKeys);
     Nan::SetPrototypeMethod(tpl, "encrypt", encrypt);
     Nan::SetPrototypeMethod(tpl, "decrypt", decrypt);
+    Nan::SetPrototypeMethod(tpl, "destroy", destroy);
     
     constructor.Reset(tpl->GetFunction());
 
