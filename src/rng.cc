@@ -62,11 +62,6 @@ using CryptoPP::SHA3_256;
 // javascript object constructor
 Nan::Persistent<v8::Function> RNG::constructor;
 
-// global Isaac RNG object 
-IsaacRandomPool l_PRNG;
-std::mutex l_mtx;
-
-
 // -----------
 // Constructor
 // -----------
@@ -76,12 +71,16 @@ std::mutex l_mtx;
  *
  * @param initCallback callback to be invoked after async 
  *        operation 
+ * @param prng isaac RNG object pointer
  * @param fileId file identifier of RNG state on disk
  * @param digest key used to encrypt/decrypt RNG state on disk
  */
-RNG::Worker::Worker(Nan::Callback* initCallback, const std::string& fileId, 
+RNG::Worker::Worker(Nan::Callback* initCallback, 
+    IsaacRandomPool* prng,
+    const std::string& fileId, 
     const std::vector<uint8_t>& digest): 
-    Nan::AsyncWorker(initCallback), 
+    Nan::AsyncWorker(initCallback),
+    _prng(prng), 
     _fileId(fileId), 
     _digest(digest) {
 
@@ -162,9 +161,7 @@ void RNG::Worker::HandleErrorCallback () {
  */
 void RNG::Worker::Execute() {
     // Check if the RNG has state on disk and is initialized in memory.
-    l_mtx.lock();
-    _result = l_PRNG.IsInitialized(_fileId, _digest);
-    l_mtx.unlock();
+    _result = _prng->IsInitialized(_fileId, _digest);
     
     if (_result == IsaacRandomPool::STATUS::SUCCESS) {
         return;
@@ -250,6 +247,8 @@ NAN_METHOD(RNG::New) {
  */
 NAN_METHOD(RNG::isInitialized) {
 
+    RNG* obj = ObjectWrap::Unwrap<RNG>(info.Holder());
+
     // Check arguments.
     if (!node::Buffer::HasInstance(info[0])) {
 
@@ -300,7 +299,7 @@ NAN_METHOD(RNG::isInitialized) {
     Nan::Callback *callback = new Nan::Callback(info[2].As<v8::Function>());
 
     // Initialize the async worker and queue it.
-    Worker* worker = new Worker(callback, fileId, digest);
+    Worker* worker = new Worker(callback, &obj->prng, fileId, digest);
 
     Nan::AsyncQueueWorker(worker);
 
@@ -324,6 +323,8 @@ NAN_METHOD(RNG::isInitialized) {
  * @return void
  */
 NAN_METHOD(RNG::initialize) {
+
+    RNG* obj = ObjectWrap::Unwrap<RNG>(info.Holder());
 
     // Check arguments
     if (!node::Buffer::HasInstance(info[0])) {
@@ -380,7 +381,7 @@ NAN_METHOD(RNG::initialize) {
     try {
         for (; multiplier < MAX_ENTROPY_GEN_MULTIPLIER; ++multiplier) {
 
-            if (l_PRNG.Initialize(fileId, multiplier, digest)) {
+            if (obj->prng.Initialize(fileId, multiplier, digest)) {
                 break;
             }
         }
@@ -422,6 +423,8 @@ NAN_METHOD(RNG::initialize) {
  */
 NAN_METHOD(RNG::getBytes) {
 
+    RNG* obj = ObjectWrap::Unwrap<RNG>(info.Holder());
+
     // Unwrap the first argument to get the number of required random bytes.
     uint32_t val = 0;
     if (!info[0]->IsUndefined()) {
@@ -434,7 +437,7 @@ NAN_METHOD(RNG::getBytes) {
     // Invoke 'GenerateBlock' on the isaac RNG to get the required random bytes.
     try {
 
-        l_PRNG.GenerateBlock(output.data(), val);
+        obj->prng.GenerateBlock(output.data(), val);
         
     } catch (const std::exception& ex) {
 
@@ -467,7 +470,9 @@ NAN_METHOD(RNG::getBytes) {
  */
 NAN_METHOD(RNG::destroy) {
 
-    l_PRNG.Destroy();
+    RNG* obj = ObjectWrap::Unwrap<RNG>(info.Holder());
+
+    obj->prng.Destroy();
 
 }
 
