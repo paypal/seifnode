@@ -1,4 +1,4 @@
-var addon = require('seifnode');
+var addon = require('../index.js');
 var assert = require("assert");
 
 // buffer containing seed for ocg random number generator used by AESXOR
