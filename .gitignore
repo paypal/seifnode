@@ -35,3 +35,7 @@ examples/.ecies*
 examples/rng1
 test/.ecies*
 test/rng1
+
+# modules
+node_modules
+deps
