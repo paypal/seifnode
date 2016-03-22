@@ -3,6 +3,7 @@ echo `pwd`
 rngConfigFile="`pwd`/config"
 mkdir deps
 cd deps
+rm -rf seifrng
 git clone https://github.com/paypal/seifrng.git
 cd seifrng
 mkdir build

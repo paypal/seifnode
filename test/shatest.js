@@ -1,4 +1,4 @@
-var addon = require('seifnode');
+var addon = require('../index.js');
 var assert = require("assert");
 
 // Mocha tests for SEIFSHA3 object.

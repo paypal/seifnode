@@ -1,4 +1,4 @@
-var addon = require('seifnode');
+var addon = require('../index.js');
 var fs = require("fs");
 var glob = require("glob")
 var assert = require("assert");
