@@ -97,6 +97,8 @@ class RNG : public Nan::ObjectWrap {
 		        // status of operation of checking if RNG state is saved on disk
 		        IsaacRandomPool::STATUS _result;
 
+		        bool _isLoaded;
+
 		    public:
 		    	// -----------
 				// Constructor
@@ -114,7 +116,13 @@ class RNG : public Nan::ObjectWrap {
 		        Worker(Nan::Callback* initCallback, 
 		        	IsaacRandomPool* prng,
 		        	const std::string& fileId, 
-            		const std::vector<uint8_t>& digest);
+            		const std::vector<uint8_t>& digest
+            	);
+
+            	Worker(Nan::Callback* initCallback, 
+				    IsaacRandomPool* prng,
+				    bool isLoaded
+				);
 
 
 		        // ----------------
@@ -243,6 +251,22 @@ class RNG : public Nan::ObjectWrap {
 		 * @return void
 		 */
 		static NAN_METHOD(getBytes);
+
+
+		// ---------
+		// saveState
+		// ---------
+		/**
+		 * @brief Encryptes and saves the state of the RNG to disk
+		 *
+		 * Invoked as:
+		 * 'obj.saveState(function (result) {})' 
+		 * 'result' is a js object containing the code('code') and 
+		 * 	message('message')
+		 *
+		 * @return void
+		 */
+		static NAN_METHOD(saveState);
 
 
 		// -------

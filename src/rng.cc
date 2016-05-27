@@ -78,11 +78,21 @@ Nan::Persistent<v8::Function> RNG::constructor;
 RNG::Worker::Worker(Nan::Callback* initCallback, 
     IsaacRandomPool* prng,
     const std::string& fileId, 
-    const std::vector<uint8_t>& digest): 
-    Nan::AsyncWorker(initCallback),
-    _prng(prng), 
-    _fileId(fileId), 
-    _digest(digest) {
+    const std::vector<uint8_t>& digest
+): Nan::AsyncWorker(initCallback),
+_prng(prng), 
+_fileId(fileId), 
+_digest(digest),
+_isLoaded(false) {
+
+}
+
+RNG::Worker::Worker(Nan::Callback* initCallback, 
+    IsaacRandomPool* prng,
+    bool isLoaded
+): Nan::AsyncWorker(initCallback),
+_prng(prng),
+_isLoaded(isLoaded) {
 
 }
 
@@ -161,8 +171,13 @@ void RNG::Worker::HandleErrorCallback () {
  */
 void RNG::Worker::Execute() {
     // Check if the RNG has state on disk and is initialized in memory.
-    _result = _prng->IsInitialized(_fileId, _digest);
     
+    if (_isLoaded == false) {
+        _result = _prng->IsInitialized(_fileId, _digest);
+    } else {
+        _result = _prng->SaveState();
+    }
+
     if (_result == IsaacRandomPool::STATUS::SUCCESS) {
         return;
     }
@@ -176,7 +191,7 @@ void RNG::Worker::Execute() {
         SetErrorMessage("Decryption Error");
     } else{
         SetErrorMessage("Unknown Error");
-    }
+    }   
 }
 
 
@@ -456,6 +471,33 @@ NAN_METHOD(RNG::getBytes) {
 
 
 
+// ---------
+// saveState
+// ---------
+/**
+ * @brief Encryptes and saves the state of the RNG to disk
+ *
+ * Invoked as:
+ * 'obj.saveState(function (result) {})' 
+ * 'result' is a js object containing the code('code') and 
+ *  message('message')
+ *
+ * @return void
+ */
+NAN_METHOD(RNG::saveState) {
+    RNG* obj = ObjectWrap::Unwrap<RNG>(info.Holder());
+    
+    // Unwrap the first argument to get given callback function.
+    Nan::Callback *callback = new Nan::Callback(info[0].As<v8::Function>());
+
+    // Initialize the async worker and queue it.
+    Worker* worker = new Worker(callback, &obj->prng, true);
+
+    Nan::AsyncQueueWorker(worker);
+}
+
+
+
 // -------
 // destroy
 // -------
@@ -469,11 +511,9 @@ NAN_METHOD(RNG::getBytes) {
  * @return void
  */
 NAN_METHOD(RNG::destroy) {
-
     RNG* obj = ObjectWrap::Unwrap<RNG>(info.Holder());
-
+    
     obj->prng.Destroy();
-
 }
 
 
@@ -496,12 +536,13 @@ void RNG::Init(v8::Handle<v8::Object> exports) {
     // Prepare constructor template.
     v8::Local<v8::FunctionTemplate> tpl = Nan::New<v8::FunctionTemplate>(New);
     tpl->SetClassName(Nan::New("RNG").ToLocalChecked());
-    tpl->InstanceTemplate()->SetInternalFieldCount(4);
+    tpl->InstanceTemplate()->SetInternalFieldCount(5);
 
     // Prototype
     Nan::SetPrototypeMethod(tpl, "getBytes", getBytes);
     Nan::SetPrototypeMethod(tpl, "isInitialized", isInitialized);
     Nan::SetPrototypeMethod(tpl, "initialize", initialize);
+    Nan::SetPrototypeMethod(tpl, "saveState", saveState);
     Nan::SetPrototypeMethod(tpl, "destroy", destroy);
     
     constructor.Reset(tpl->GetFunction());
