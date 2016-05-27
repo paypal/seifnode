@@ -96,7 +96,9 @@ class RNG : public Nan::ObjectWrap {
 		        std::vector<uint8_t> _digest; 
 		        // status of operation of checking if RNG state is saved on disk
 		        IsaacRandomPool::STATUS _result;
-
+		        /* boolean indicating whether the Worker is going to save or
+		         * load the RNG state
+		         */
 		        bool _isLoaded;
 
 		    public:
