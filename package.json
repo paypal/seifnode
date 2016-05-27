@@ -6,7 +6,8 @@
   "private": true,
   "scripts": {
   	"preinstall": "bash installrng.sh",
-    "test": "mocha"
+    "test": "mocha",
+    "postinstall": "bash postinstall.sh"
   },
   "dependencies": {
     "nan": "*"
