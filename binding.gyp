@@ -35,8 +35,7 @@
                     ],
                     "libraries": [
                         "/usr/local/lib/libcryptopp.a",
-                        "<!(pwd)/deps/seifrng/lib/*",
-                        "-Wl,-rpath <!(pwd)/deps/seifrng/lib/"
+                        "<!(pwd)/deps/seifrng/lib/*"
                     ],
                 }],
                 [ 'OS=="linux"', {
@@ -49,8 +48,7 @@
                     ],
                     "libraries": [
                         "/usr/local/lib/libcryptopp.a",
-                        "<!(pwd)/deps/seifrng/lib/*",
-                        "-Wl,-rpath <!(pwd)/deps/seifrng/lib/"
+                        "<!(pwd)/deps/seifrng/lib/*"
                     ],
                 }],
                 [ 'OS=="win"', {
