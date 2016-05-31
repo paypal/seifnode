@@ -96,6 +96,19 @@ var buffer = obj.getBytes(numBytes);
 // 'buffer' is a node.js buffer
 ```
 
+**function saveState()**
+
+Encrypts and saves the RNG state to disk.
+
+```javascript
+obj.saveState(function(result) {
+
+	console.log(result.code);
+	console.log(result.message);
+
+});
+```
+
 **function destroy()**
 
 Destroys the underlying RNG object thus saving the state to disk.
