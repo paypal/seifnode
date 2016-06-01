@@ -122,7 +122,9 @@ void RNG::Worker::HandleOKCallback () {
         Nan::New<v8::String>("Success").ToLocalChecked());
 
     v8::Local<v8::Value> argv[] = {status};
-    callback->Call(1, argv);
+    if (callback->IsEmpty() == false) {
+        callback->Call(1, argv);
+    }
 }
 
 
@@ -153,7 +155,9 @@ void RNG::Worker::HandleErrorCallback () {
         Nan::New<v8::String>(ErrorMessage()).ToLocalChecked());
 
     v8::Local<v8::Value> argv[] = {error};
-    callback->Call(1, argv);
+    if (callback->IsEmpty() == false) {
+        callback->Call(1, argv);
+    }
 }
 
 
