@@ -1,20 +1,42 @@
 {
-  "name": "seifnode",
-  "version": "0.0.0",
-  "description": "Node.js Implementation of SEIF protocol helper modules",
-  "main": "index.js",
-  "private": true,
-  "scripts": {
-  	"preinstall": "bash installrng.sh",
-    "test": "mocha",
-    "postinstall": "bash postinstall.sh"
-  },
-  "dependencies": {
-    "nan": "*"
-  },
-  "devDependencies": {
-    "glob": "*",
-    "mocha": "*"  
-  },
-  "gypfile": true
+    "name": "seifnode",
+    "version": "1.0.0",
+    "description": "Node.js Implementation of Seif random and crypto services",
+    "main": "index.js",
+    "scripts": {
+        "preinstall": "bash installrng.sh",
+        "test": "mocha",
+        "postinstall": "bash postinstall.sh"
+    },
+    "dependencies": {
+        "nan": "*"
+    },
+    "devDependencies": {
+        "glob": "*",
+        "mocha": "*"
+    },
+    "gypfile": true,
+    "contributors": [{
+        "name": "Rohit Harchandani",
+        "email": "harchu@gmail.com"
+    }, {
+        "name": "Aashish Sheshadri",
+        "email": "aashish.sheshadri@gmail.com",
+        "url": "http://www.aashish.me"
+    }],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/paypal/seifnode.git"
+    },
+    "engines": {
+        "node": ">=0.12"
+    },
+    "license": "MIT",
+    "homepage": "http://www.seif.place",
+    "keywords": [
+        "security",
+        "crypto",
+        "encryption",
+        "random"
+    ]
 }
