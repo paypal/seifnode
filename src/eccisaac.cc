@@ -215,7 +215,6 @@ void PrintPublicKey(const DL_PublicKey_EC<ECP>& key, std::ostream& out)
  */
 ECCISAAC::Worker::Worker(
     Nan::Callback* initCallback, 
-    // IsaacRandomPool* prng,
     const std::vector<uint8_t>& key, 
     const std::string& folderPath
 ): Nan::AsyncWorker(initCallback), 
