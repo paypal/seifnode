@@ -78,6 +78,9 @@ namespace ASN1 = CryptoPP::ASN1;
 #include <cryptopp/sha3.h>
 using CryptoPP::SHA3_256;
 
+#include <cryptopp/osrng.h>
+using CryptoPP::AutoSeededRandomPool;
+
 
 // ----------------
 // library includes
@@ -206,18 +209,15 @@ void PrintPublicKey(const DL_PublicKey_EC<ECP>& key, std::ostream& out)
  *
  * @param initCallback callback to be invoked after async 
  *        operation 
- * @param prng isaac rng object pointer 
  * @param key disk access key for public/private keys and 
  *        rng state 
  * @param folderPath folder containing keys and rng state files
  */
 ECCISAAC::Worker::Worker(
     Nan::Callback* initCallback, 
-    IsaacRandomPool* prng,
     const std::vector<uint8_t>& key, 
     const std::string& folderPath
 ): Nan::AsyncWorker(initCallback), 
-_wprng(prng),  
 _wfolderPath(folderPath),
 _wkey(key) {
 
@@ -332,7 +332,6 @@ void ECCISAAC::Worker::Execute() {
         _status = ECCISAAC::loadKeys(
             _encodedPub, 
             _encodedPriv, 
-            *(_wprng),
             _wkey, 
             _wfolderPath
         );
@@ -560,7 +559,6 @@ ECCISAAC::STATUS ECCISAAC::LoadPublicKey(
  *
  * @param encodedPub public key to be loaded from encrypted file
  * @param encodedPriv private key to be loaded from encrypted file
- * @param prng isaac rng object reference 
  * @param key disk access key for public/private keys and 
  *        rng state 
  * @param folderPath folder containing keys and rng state files
@@ -570,7 +568,6 @@ ECCISAAC::STATUS ECCISAAC::LoadPublicKey(
 ECCISAAC::STATUS ECCISAAC::loadKeys(
     std::string& encodedPub, 
     std::string& encodedPriv, 
-    IsaacRandomPool& prng,
     const std::vector<uint8_t>& key, 
     const std::string& folderPath
 ) 
@@ -626,13 +623,6 @@ ECCISAAC::STATUS ECCISAAC::loadKeys(
 
     std::string fileId = folderPath + fileName;
 
-    // Check if the isaac RNG has saved state on the disk.
-    IsaacRandomPool::STATUS status = prng.IsInitialized(fileId, digest);
-
-    if (status != IsaacRandomPool::STATUS::SUCCESS) {
-        return ECCISAAC::STATUS::RNG_INIT_ERROR;
-    }
-
     return ECCISAAC::STATUS::SUCCESS;
 }
 
@@ -646,7 +636,6 @@ ECCISAAC::STATUS ECCISAAC::loadKeys(
  *
  * @param encodedPub public key to be generated
  * @param encodedPriv private key to be generated
- * @param prng isaac rng object reference 
  * @param key disk access key for public/private keys and 
  *        rng state 
  * @param folderPath folder containing keys and rng state files
@@ -656,7 +645,6 @@ ECCISAAC::STATUS ECCISAAC::loadKeys(
 bool ECCISAAC::generateKeys(
     std::string& encodedPub, 
     std::string& encodedPriv, 
-    IsaacRandomPool& prng,
     const std::vector<uint8_t>& key, 
     const std::string& folderPath
 ) 
@@ -665,6 +653,8 @@ bool ECCISAAC::generateKeys(
     std::string fileName = RNG_STATE_FILE_NAME;
 
     std::string fileId = folderPath + fileName;
+
+    IsaacRandomPool prng;
     
     /* Initialize the global Isaac rng object and check if 
      * initialization succeeded. if it fails, increase the multiplier argument 
@@ -721,13 +711,6 @@ bool ECCISAAC::generateKeys(
 
     StringSource ss2(privStr, true, 
         new CryptoPP::HexEncoder(new StringSink(encodedPriv)));
-
-    // Hash the private key string using CryptoPP SHA3-256.
-    std::vector<uint8_t> digest(CryptoPP::SHA3_256::DIGESTSIZE);
-    hashString(digest, encodedPriv);
-    
-    // Set the above hash as the AES key of the RNG state saved to disk.
-    prng.InitializeEncryption(digest);
 
     return true;
 }
@@ -861,7 +844,11 @@ NAN_METHOD(ECCISAAC::loadKeys) {
     Nan::Callback *callback = new Nan::Callback(info[0].As<v8::Function>());
 
     // Initialize the async worker and queue it.
-    Worker* worker = new Worker(callback, &obj->_prng, obj->_key, obj->_folderPath);
+    Worker* worker = new Worker(
+        callback, 
+        obj->_key, 
+        obj->_folderPath
+    );
 
     Nan::AsyncQueueWorker(worker);
 }
@@ -894,7 +881,6 @@ NAN_METHOD(ECCISAAC::generateKeys) {
     if (!obj->generateKeys(
             encodedPub, 
             encodedPriv,
-            obj->_prng, 
             obj->_key, 
             obj->_folderPath
         )
@@ -982,13 +968,15 @@ NAN_METHOD(ECCISAAC::encrypt) {
         ECIES<ECP>::Encryptor e1;
         StringSource ss(em, true);
         e1.AccessPublicKey().Load(ss);
+
+        AutoSeededRandomPool prng;
     
         /* Apply the CryptoPP PK_EncryptorFilter transformer to encrypt the  
          * message buffer; store the result in a string 'em0' using ArraySource.
          */
         std::string em0;
         ArraySource ss1 (messageData, messageLength, true, 
-            new PK_EncryptorFilter(obj->_prng, e1, new StringSink(em0) ) );
+            new PK_EncryptorFilter(prng, e1, new StringSink(em0) ) );
 
         // Hex encode the string cipher using CryptoPP StringSource & HexEncoder
         StringSource ss6(em0, true, 
@@ -1076,12 +1064,13 @@ NAN_METHOD(ECCISAAC::decrypt) {
         StringSource ss6(encodedCipher, true, 
             new CryptoPP::HexDecoder(new StringSink(em0)));
 
+        AutoSeededRandomPool prng;
     
         /* Apply the CryptoPP PK_DecryptorFilter transformer to decrypt the  
          * cipher string and store the result in a string using StringSource.
          */
         StringSource ss2 (em0, true, 
-            new PK_DecryptorFilter(obj->_prng, d1, new StringSink(dm0) ) );
+            new PK_DecryptorFilter(prng, d1, new StringSink(dm0) ) );
 
     } catch (const std::exception& ex) {
 
@@ -1103,26 +1092,6 @@ NAN_METHOD(ECCISAAC::decrypt) {
 }
 
 
-// -------
-// destroy
-// -------
-/**
- * @brief Destroys the underlying ECCISAAC object which in turn 
- *        destroys the isaac RNG object thus saving the state to disk.
- *        
- * Invoked as:
- * 'obj.destroy()' 
- *
- * @return void
- */
-NAN_METHOD(ECCISAAC::destroy) {
-
-    ECCISAAC* obj = ObjectWrap::Unwrap<ECCISAAC>(info.Holder());
-
-    obj->_prng.Destroy();
-}
-
-
 // ----
 // Init
 // ----
@@ -1141,14 +1110,13 @@ void ECCISAAC::Init(v8::Handle<v8::Object> exports) {
     // Prepare constructor template.
     v8::Local<v8::FunctionTemplate> tpl = Nan::New<v8::FunctionTemplate>(New);
     tpl->SetClassName(Nan::New("ECCISAAC").ToLocalChecked());
-    tpl->InstanceTemplate()->SetInternalFieldCount(5);
+    tpl->InstanceTemplate()->SetInternalFieldCount(4);
 
     // Prototype
     Nan::SetPrototypeMethod(tpl, "loadKeys", loadKeys);
     Nan::SetPrototypeMethod(tpl, "generateKeys", generateKeys);
     Nan::SetPrototypeMethod(tpl, "encrypt", encrypt);
     Nan::SetPrototypeMethod(tpl, "decrypt", decrypt);
-    Nan::SetPrototypeMethod(tpl, "destroy", destroy);
     
     constructor.Reset(tpl->GetFunction());
 
