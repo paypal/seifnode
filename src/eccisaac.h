@@ -76,9 +76,6 @@ class ECCISAAC : public Nan::ObjectWrap {
 
 	private:
 
-		// Isaac RNG object
-		IsaacRandomPool _prng;
-
 		// javascript object constructor
 		static Nan::Persistent<v8::Function> constructor;
 
@@ -117,8 +114,6 @@ class ECCISAAC : public Nan::ObjectWrap {
 				// data
 				// ----
 
-		    	// reference to isaac rng object
-		    	IsaacRandomPool* _wprng;
 				// folder containing keys and rng state files
 		        std::string _wfolderPath;
 		        // disk access key for public/private keys and rng state 
@@ -140,7 +135,6 @@ class ECCISAAC : public Nan::ObjectWrap {
 				 *
 				 * @param initCallback callback to be invoked after async 
 				 *		  operation 
-				 * @param prng isaac rng object pointer 
 				 * @param key disk access key for public/private keys and 
 				 * 		  rng state 
 				 * @param folderPath folder containing keys and rng state files
@@ -148,7 +142,6 @@ class ECCISAAC : public Nan::ObjectWrap {
 		        // Worker(Nan::Callback* initCallback, ECCISAAC* obj);
 				Worker(
 					Nan::Callback* initCallback, 
-					IsaacRandomPool* prng,
 					const std::vector<uint8_t>& key, 
 					const std::string& folderPath
 				);	
@@ -329,7 +322,6 @@ class ECCISAAC : public Nan::ObjectWrap {
 		static STATUS loadKeys(
 			std::string& encodedPub, 
 			std::string& encodedPriv,
-			IsaacRandomPool& prng, 
 			const std::vector<uint8_t>& key, 
 			const std::string& folderPath
 		);
@@ -353,8 +345,7 @@ class ECCISAAC : public Nan::ObjectWrap {
 		 */
 		static bool generateKeys(
 			std::string& encodedPub, 
-			std::string& encodedPriv, 
-			IsaacRandomPool& prng,
+			std::string& encodedPriv,
 			const std::vector<uint8_t>& key, 
     		const std::string& folderPath
     	);
@@ -465,21 +456,6 @@ class ECCISAAC : public Nan::ObjectWrap {
 		 * @return void
 		 */
 		static NAN_METHOD(decrypt);
-
-
-		// -------
-		// destroy
-		// -------
-		/**
-		 * @brief Destroys the underlying ECCISAAC object which in turn 
-		 * 		  destroys the isaac RNG object thus saving the state to disk.
-		 *		  
-		 * Invoked as:
-		 * 'obj.destroy()' 
-		 *
-		 * @return void
-		 */
-		static NAN_METHOD(destroy);
 
 	public:
 		
