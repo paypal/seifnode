@@ -62,4 +62,27 @@ static void hashString(std::vector<uint8_t>& digest, const std::string& str) {
 }
 
 
+// ----------
+// hashBuffer
+// ----------
+/**
+ * @brief creates a SHA3-256 hash of the given buffer using CryptoPP
+ * @param digest output vector in which the hash to be stored
+ * @param input input buffer to be hashed
+ * @param inputLen length of input buffer to be hashed
+ * PreCondition: 'digest' should be of appropriate size 
+ * (CryptoPP::SHA3_256::DIGESTSIZE)
+ * @return void
+ */
+static void hashBuffer(
+	std::vector<uint8_t>& digest,
+	const uint8_t* input,
+	int inputLen
+) {
+    CryptoPP::SHA3_256 hash;
+    hash.Update(input, inputLen);
+    hash.Final(digest.data());
+}
+
+
 #endif
