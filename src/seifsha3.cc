@@ -125,18 +125,35 @@ NAN_METHOD(SEIFSHA3::hash) {
 
     // Checking arguments and unwrapping them to get the string data.
     if (info[0]->IsUndefined()) {
-        Nan::ThrowError("Incorrect Arguments. String value to be hashed not "
+        Nan::ThrowError("Incorrect Arguments. Value to be hashed not "
                         "provided");
         return;
     }
-    
-    v8::String::Utf8Value str(info[0]->ToString());
 
-    /* Using crypto++ sha3-256 hash function to hash data and store in 
-     * 'digest' array. Definition of 'hashString' can be found in 'util.h'.
-     */
+    // Output buffer containing the hash
     std::vector<uint8_t> digest(CryptoPP::SHA3_256::DIGESTSIZE);
-    hashString(digest, *str);
+
+    // Check if first argument is a buffer or a string and hash accordingly.
+    if (!node::Buffer::HasInstance(info[0])) {
+        v8::String::Utf8Value str(info[0]->ToString());
+
+        /* Using crypto++ sha3-256 hash function to hash data and store in 
+         * 'digest' array. Definition of 'hashString' can be found in 'util.h'.
+         */
+        hashString(digest, *str);
+    } else {
+        // Unwrap the first argument to get the input buffer to be hashed
+        v8::Local<v8::Object> bufferObj = 
+            Nan::To<v8::Object>(info[0]).ToLocalChecked();
+        
+        uint8_t* bufferData = (uint8_t*)node::Buffer::Data(bufferObj);
+        size_t bufferLength = node::Buffer::Length(bufferObj);
+
+        /* Using crypto++ sha3-256 hash function to hash data and store in 
+         * 'digest' array. Definition of 'hashBuffer' can be found in 'util.h'.
+         */
+        hashBuffer(digest, bufferData, bufferLength);
+    }
 
     // Copying digest hash value to node.js buffer.
     auto slowBuffer = Nan::CopyBuffer((const char*)digest.data(), 
