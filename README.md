@@ -269,10 +269,10 @@ Dependencies
 ###1. Cryptopp/crypto++ 
 https://www.cryptopp.com/
 
-Used for all cryptographic functions. Library installed version 5.6.2 
+Used for all cryptographic functions. Library installed version 5.6.4 
 
 **License:**
-Crypto++ Library is copyrighted as a compilation and (as of version 5.6.2) licensed under the Boost Software License 1.0, while the individual files in the compilation are all public domain.
+Crypto++ Library is copyrighted as a compilation and (as of version 5.6.4) licensed under the Boost Software License 1.0, while the individual files in the compilation are all public domain.
 https://www.cryptopp.com/License.txt
 
 ###2. PCG C++ Implementation
