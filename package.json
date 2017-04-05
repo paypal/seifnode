@@ -1,6 +1,6 @@
 {
     "name": "seifnode",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "description": "Node.js Implementation of Seif random and crypto services",
     "main": "index.js",
     "scripts": {
@@ -17,19 +17,19 @@
     },
     "gypfile": true,
     "contributors": [{
-        "name": "Rohit Harchandani",
-        "email": "harchu@gmail.com"
-    }, {
         "name": "Aashish Sheshadri",
         "email": "aashish.sheshadri@gmail.com",
         "url": "http://www.aashish.me"
+    }, {
+        "name": "Rohit Harchandani",
+        "email": "harchu@gmail.com"
     }],
     "repository": {
         "type": "git",
         "url": "https://github.com/paypal/seifnode.git"
     },
     "engines": {
-        "node": ">=0.12"
+        "node": ">=6.9.2"
     },
     "license": "MIT",
     "homepage": "http://www.seif.place",
