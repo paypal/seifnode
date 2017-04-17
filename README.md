@@ -1,7 +1,7 @@
 seifnode
 ========
 
-Node.js Implementation of SEIF protocol helper modules
+Node.js Implementation of Seif Crypto Modules
 
 Getting Started
 ===============
@@ -12,18 +12,17 @@ From your project directory, run (see below for requirements):
 $ npm install seifnode
 ```
 
+Seifnode depends on the c++ library [Seifrng](https://github.com/paypal/seifrng) which will be installed locally during pre-install; Seifrng uses the [CMake](https://cmake.org) build system which too will be installed locally if not found. The node module also depends of Crypto++ which will be locally installed by [Seifrng](https://github.com/paypal/seifrng) if not found during pre-install.
+
+On Linux systems the node module requires [PatchELF](https://nixos.org/patchelf.html) utility which will be installed locally if not found during pre-install.
+
+
+
 Alternatively, to use the latest development version from Github:
 
 ```
 $ npm install <git-path>
 ```
-
-Requirements
-============
-
-1. opencv
-2. portaudio
-3. cryptopp
 
 Test
 ====
@@ -37,22 +36,22 @@ $ npm test
 Examples
 ========
 
-Please refer to the "examples" directory to see examples of how to use the various modules exposed.
+Please refer to the "examples" directory to see examples of how to use the various modules.
 
 Interface
 =========
 
 The module exposes four different interfaces useful for different purposes.
 
-###1. RNG
+### 1. RNG
 
-This module exposes the isaac random number generator to node.js. We haven't made any changes to the random number generation process as such. The only enhancement is that we are accessing the random number generator state and encrypting it before persisting it to the disk.
+This module exposes the ISAAC random number generator to node.js from the c++ library [seifrng](https://github.com/paypal/seifrng). We haven't made any changes to the random number generation process as such. The only enhancement is that we are accessing the random number generator state and encrypting it before persisting it to the disk.
 
 **Initialization:**
 
 ```javascript
-var seifnode = require("seifnode");
-var obj = seifnode.RNG();
+let seifnode = require("seifnode");
+let seifrng = seifnode.RNG();
 ```
 
 **Usage:**
@@ -64,7 +63,7 @@ The functions exposed are as follows:
 Creates an async worker to check if the RNG has been initialized by checking if the state file exists and can be decrypted using the given key. Once the async work is complete, the RNG is initialized with the state on the disk if present or an appropriate error is given to the callback.
 
 ```javascript
-obj.isInitialized(key, filename, function(result) {
+seifrng.isInitialized(key, filename, function(result) {
 
 	console.log(result.code);
 	console.log(result.message);
@@ -72,7 +71,7 @@ obj.isInitialized(key, filename, function(result) {
 });
 // 'key' is a buffer containing the disk encryption/decryption key
 // 'filename' is the name of the RNG saved state file on disk
-// 'result' is a js object containing the code('code') and message('message')
+// 'result' is an object containing the code('code') and message('message')
 ```
 
 **function initialize(key, filename)**
@@ -80,7 +79,7 @@ obj.isInitialized(key, filename, function(result) {
 Initilizes the RNG by gathering entropy from the available sources (Please look at the "rng" repo for more details at <>). Once the entropy generation is complete, the RNG is initialized using the generated seed and it is ready to be used.
 
 ```javascript
-obj.initialize(key, filename);
+seifrng.initialize(key, filename);
 // 'key' is a buffer containing the disk encryption/decryption key
 // 'filename' is the name of the RNG saved state file on disk
 ```
@@ -90,8 +89,8 @@ obj.initialize(key, filename);
 Gets the number of random bytes required and returns a buffer with the random output. If the RNG has not been initialized an error will be thrown.
 
 ```javascript
-var numbytes = 32;
-var buffer = obj.getBytes(numBytes);
+let numbytes = 32;
+let buffer = seifrng.getBytes(numBytes);
 // 'numBytes' is the number of required random bytes
 // 'buffer' is a node.js buffer
 ```
@@ -101,7 +100,7 @@ var buffer = obj.getBytes(numBytes);
 Encrypts and saves the RNG state to disk.
 
 ```javascript
-obj.saveState(function(result) {
+seifrng.saveState(function(result) {
 
 	console.log(result.code);
 	console.log(result.message);
@@ -114,19 +113,19 @@ obj.saveState(function(result) {
 Destroys the underlying RNG object thus saving the state to disk.
 
 ```javascript
-obj.destroy();
+seifrng.destroy();
 ```
 
 
-###2. ECCISAAC
+### 2. ECC
 
 This module is responsible for exposing Crypto++ ECC functions using our implementation of isaac random number generator.
 
 **Initialization:**
 
 ```javascript
-var seifnode = require("seifnode");
-var obj = seifnode.ECCISAAC(diskKey, folder);
+let seifnode = require("seifnode");
+let seifecc = seifnode.ECC(diskKey, folder);
 // 'diskKey' is the key used to encrypt the keys and rng state
 // 'folder' is the folder where the keys and rng state are saved on disk
 ```
@@ -140,7 +139,7 @@ The functions exposed are as follows:
 Creates an async worker to load keys from the disk (encrypted using the key provided during initialization) and invokes the callback function with the error object (if applicable) and/or the object containing the keys.
 
 ```javascript
-obj.loadKeys(function(status, keys) {
+seifecc.loadKeys(function(status, keys) {
 
 	// 'status' (if applicable) is of the form: {code: [statusCode], message: [statusMessage]}
 	console.log(status);
@@ -155,23 +154,23 @@ obj.loadKeys(function(status, keys) {
 Initializes the isaac RNG and uses it to generate the public/private keys and return them to the caller. These keys are also encrypted and saved to the disk.
 
 ```javascript
-var keys = obj.generateKeys();
+let keys = seifecc.generateKeys();
 // 'keys' (if available) is of the form: {enc: [publicKey], dec: [privateKey]}
 ```
 
 **function encrypt(publicKey, message)**
 
-Encrypts the message buffer using the public key to return the cipher string (We are using Cryptopp ECIES for this purpose and the curve used is the NIST approved SECP521r1. For more details, please refer <>).
+Encrypts the message buffer using the public key to return the cipher string (We are using Cryptopp ECIES for this purpose and the curve used is the NIST approved SECP521r1).
 
 ```javascript
-obj.loadKeys(function(status, keys) {
+seifecc.loadKeys(function(status, keys) {
 
 	if (status === undefined && keys !== undefined) {
-			
-		var cipher = obj.encrypt(keys.enc, message);
+
+		let cipher = obj.encrypt(keys.enc, message);
 		// 'keys.enc' is the string containing the hex encoded ECC public key
 		// 'message' is the buffer containing the message to be encrypted
-		// 'cipher' is the string containing the encrypted cipher
+		// 'cipher' is a buffer containing the encrypted cipher
 
 	}
 
@@ -180,33 +179,33 @@ obj.loadKeys(function(status, keys) {
 
 **function decrypt(privateKey, cipher)**
 
-Decrypts the cipher string using the private key to return the original message buffer (We are using Cryptopp ECIES for this purpose and the curve used is the NIST approved SECP521r1. For more details, please refer <>).
+Decrypts the cipher buffer using the private key to return the original message buffer (We are using Cryptopp ECIES for this purpose and the curve used is the NIST approved SECP521r1).
 
 ```javascript
-obj.loadKeys(function(status, keys) {
+seifecc.loadKeys(function(status, keys) {
 
 	if (status === undefined && keys !== undefined) {
-			
-		var message = obj.decrypt(keys.dec, cipher);
+
+		let message = seifecc.decrypt(keys.dec, cipher);
 		// 'keys.dec' is the string containing the hex encoded ECC private key
-		// 'cipher' is the string containing the cipher to be decrypted
+		// 'cipher' is the buffer containing the cipher to be decrypted
 		// 'message' is the buffer containing the decrypted message
 
 	}
 
-});	
+});
 ```
 
 
-###3. AESXOR
+### 3. AESXOR
 
-This module is responsible for exposing our implementation of link encryption. We are exposing the Cryptopp AES implementation in the GCM mode with slight modifications to enhance security as explained below. Similary, after the cipher bytes have been decrypted they are XOR'd with PCG random bytes to get the original message. 
+This module is responsible for exposing our implementation of link encryption. We are exposing the Cryptopp AES implementation in the GCM mode with slight modifications to enhance security as explained below. Similary, after the cipher bytes have been decrypted they are XOR'd with XORShift+ random bytes to get the original message.
 
 **Initialization:**
 
 ```javascript
-var seifnode = require("seifnode");
-var obj = seifnode.AESXOR(seed);
+let seifnode = require("seifnode");
+let seifaes = seifnode.AESXOR(seed);
 // 'seed' is a buffer containing bytes representing the uint64 pcg seed
 ```
 
@@ -216,10 +215,10 @@ The functions exposed are as follows:
 
 **function encrypt(key, message)**
 
-Encrypts the message using the given key to return the cipher. As part of this process, the message bytes are first XOR'd with equal number of random bytes generated using PCG <> and then encrypted using the AES-GCM mode.
+Encrypts the message using the given key to return the cipher. As part of this process, the message bytes are first XOR'd with equal number of random bytes generated using XORShift+ and then encrypted using the AES-GCM mode.
 
 ```javascript
-var cipher = obj.encrypt(key, message);
+let cipher = seifaes.encrypt(key, message);
 // 'key' is the buffer containing the AES key
 // 'message' is the buffer containing the message to be encrypted
 // 'cipher' is the buffer containing the encrypted cipher
@@ -227,25 +226,25 @@ var cipher = obj.encrypt(key, message);
 
 **function decrypt(key, cipher)**
 
-Decrypts the cipher to return the original message. As part of this process, after the cipher bytes have been decrypted using the AES-GCM mode, the decrypted buffer is XOR'd with as many PCG random bytes to get the original message.
+Decrypts the cipher to return the original message. As part of this process, after the cipher bytes have been decrypted using the AES-GCM mode, the decrypted buffer is XOR'd with as many XORShift+ random bytes to get the original message.
 
 ```javascript
-var message = obj.decrypt(key, cipher);
+let message = seifaes.decrypt(key, cipher);
 // 'key' is the buffer containing the AES key
 // 'cipher' is the buffer containing the cipher to be decrypted
 // 'message' is the buffer containing the decrypted message
 ```
 
 
-###4. SEIFSHA3
+### 4. SEIFSHA3
 
 This module is responsible for exposing Crypto++ SHA3 function
 
 **Initialization:**
 
 ```javascript
-var seifnode = require("seifnode");
-var obj = seifnode.SEIFSHA3();
+let seifnode = require("seifnode");
+let seifsha3 = seifnode.SEIFSHA3();
 ```
 
 **Usage:**
@@ -257,75 +256,45 @@ The functions exposed are as follows:
 Gets the string data and returns the hash (using Cryptopp implementation of SHA3-256) of the given input as a buffer object.
 
 ```javascript
-var hash = obj.hash(stringData);
-// 'stringData' is the string data to be hashed 
+let hash = seifsha3.hash(stringData);
+// 'stringData' is the string data to be hashed
 // 'hash' is the output buffer containing the SHA3-256 hash
 ```
+
+
 
 
 Dependencies
 ============
 
-###1. Cryptopp/crypto++ 
-https://www.cryptopp.com/
+### 1. [Seifrng](https://github.com/paypal/seifrng)
 
-Used for all cryptographic functions. Library installed version 5.6.4 
+For generating cryptographically secure random numbers.
 
 **License:**
-Crypto++ Library is copyrighted as a compilation and (as of version 5.6.4) licensed under the Boost Software License 1.0, while the individual files in the compilation are all public domain.
+https://github.com/paypal/seifrng/license.md
+
+### 2. [CryptoPP/Crypto++](https://www.cryptopp.com/)
+
+Used for all cryptographic functions. Library installed version 5.6.5
+
+**License:**
+Crypto++ Library is copyrighted as a compilation and (as of version 5.6.5) licensed under the Boost Software License 1.0, while the individual files in the compilation are all public domain.
 https://www.cryptopp.com/License.txt
 
-###2. PCG C++ Implementation
-http://www.pcg-random.org/
-
-Used as the RNG for link encryption. Code included in our node module: https://github.com/imneme/pcg-cpp
-
-**License:** 
-Apache License Version 2.0, January 2004
-https://github.com/imneme/pcg-cpp/blob/master/LICENSE.txt
-
-###3. OpenCV
-http://opencv.org/
-
-Portable solution to access the device camera. This is a required library dependency.
-
-**License:**
-OpenCV is released under a BSD license and hence it’s free for both academic and commercial use.
-
-###4. Node modules: nan
-https://github.com/nodejs/nan
+### 3. Node modules: [nan](https://github.com/nodejs/nan)
 
 This is basically a header file containing macros and utilities to store all logic necessary to develop native Node.js addons without having to inspect NODE_MODULE_VERSION
 
 **License & copyright:**
 https://github.com/nodejs/nan/blob/master/LICENSE.md
 
-###5. PortAudio
-http://www.portaudio.com/
-
-Portable solution to access device audio I/O. This is a required library dependency.
-
-**License:**
-We can use PortAudio for free in our projects or applications, even commercial applications.
-This license is compatible with the GNU General Public License. In other words, PortAudio can be included in a GNU project without violating the GNU license. In terms of legal compatibility, the PortAudio licence is now a plain MIT licence
-http://www.portaudio.com/license.html 
-
-###6. Isaac
-http://burtleburtle.net/bob/rand/isaacafa.html
-
-Fast cryptopgraphic random number generator
-We are using the C++ implementation with some modifications to access the RNG state.
-
-**License:** 
-Public Domain
-
-
 License
 =======
 
 The MIT License (MIT)
 
-Copyright (c) 2015 PayPal
+Copyright (c) 2015, 2016, 2017 PayPal
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -344,4 +313,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
-
