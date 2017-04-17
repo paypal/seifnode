@@ -274,7 +274,7 @@ For generating cryptographically secure random numbers.
 **License:**
 https://github.com/paypal/seifrng/license.md
 
-### 2. [Cryptopp/crypto++](https://www.cryptopp.com/)
+### 2. [CryptoPP/Crypto++](https://www.cryptopp.com/)
 
 Used for all cryptographic functions. Library installed version 5.6.5
 
