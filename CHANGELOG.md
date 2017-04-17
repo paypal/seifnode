@@ -1,7 +1,7 @@
 # Change Log
 All notable changes to this project will be documented in this file.
 
-# [Unreleased]
+# [1.0.3] - 2017-04-17
 ### Added
 - Functionality to assess entropy mining strength.
 - Contributing guidelines in CONTRIBUTING.md
