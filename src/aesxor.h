@@ -4,27 +4,27 @@
  *
  *  @author Aashish Sheshadri
  *  @author Rohit Harchandani
- *	
+ *
  *	The MIT License (MIT)
- *	
- *	Copyright (c) 2015 PayPal
- *	
+ *
+ *  Copyright (c) 2015, 2016, 2017 PayPal
+ *
  *	Permission is hereby granted, free of charge, to any person obtaining a copy
- *	of this software and associated documentation files (the "Software"), to 
- *	deal in the Software without restriction, including without limitation the 
- *	rights to use, copy, modify, merge, publish, distribute, sublicense, and/or 
+ *	of this software and associated documentation files (the "Software"), to
+ *	deal in the Software without restriction, including without limitation the
+ *	rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
  *	sell copies of the Software, and to permit persons to whom the Software is
  *	furnished to do so, subject to the following conditions:
- *	
+ *
  *	The above copyright notice and this permission notice shall be included in
  *	all copies or substantial portions of the Software.
- *	
+ *
  *	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  *	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  *	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  *	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- *	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING 
- *	FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER  
+ *	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ *	FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  *	DEALINGS IN THE SOFTWARE.
  */
 
@@ -41,14 +41,13 @@
 // -----------------
 // cryptopp includes
 // -----------------
-#include <cryptopp/aes.h>
+#include "aes.h"
 using CryptoPP::AES;
 
 // ----------------
-// pcg rng includes
+// xor shift 128 includes
 // ----------------
-#include "pcg_random.hpp"
-
+#include "xorShift128.hpp"
 
 // ---------
 // AESXOR256
@@ -68,15 +67,17 @@ class AESXOR256 : public Nan::ObjectWrap {
 
 		// javascript object constructor
 		static Nan::Persistent<v8::Function> constructor;
-		
+
 
 		// ----
 		// data
 		// ----
-		//PCG randomg number generator
-	 	pcg64_once_insecure* _rng; 
+
+		// xorShift128
+		XORShift128 _rng;
+
 	 	// AES key length
-	 	static const int AESNODE_DEFAULT_KEY_LENGTH_BYTES; 
+	 	static const int AESNODE_DEFAULT_KEY_LENGTH_BYTES;
 
 
 	 	// -----------
@@ -84,22 +85,22 @@ class AESXOR256 : public Nan::ObjectWrap {
 		// -----------
 		/**
 		 * Constructor
-		 * @brief Initializes the object including the PCG random number 
+		 * @brief Initializes the object including the PCG random number
 		 * 		  generator using the provided seed and cipher block size.
 		 *
 		 * @param seed seed for pcg rng
 		 * @param blockSize aes encryption block size
 		 *
-		 * @return 
+		 * @return
 		 */
-	    explicit AESXOR256(uint64_t seed);
+	    explicit AESXOR256(std::vector<uint64_t> seed);
 
 
 	    // ---------
 		// getRandom
 		// ---------
 	 	/**
-		 * @brief Gets random uint64 values from pcg and stores them in a byte 
+		 * @brief Gets random uint64 values from pcg and stores them in a byte
 		 *		  array.
 		 *
 		 * @param random container for resulting random bytes
@@ -114,7 +115,7 @@ class AESXOR256 : public Nan::ObjectWrap {
 		// encryptBlock
 		// ------------
 		/**
-		 * @brief Encrypts the given message using AES in GCM mode to provide 
+		 * @brief Encrypts the given message using AES in GCM mode to provide
 		 *        confidentiality and authenticity using the given key resulting
 		 *        in the cipher block.
 		 *
@@ -126,8 +127,8 @@ class AESXOR256 : public Nan::ObjectWrap {
 		 *
 		 * @return void
 		 */
-	 	void encryptBlock(std::vector<uint8_t>& cipher, 
-	 		const std::vector<uint8_t>& key, 
+	 	void encryptBlock(std::vector<uint8_t>& cipher,
+	 		const std::vector<uint8_t>& key,
 	 		const std::vector<uint8_t>& message);
 
 
@@ -135,8 +136,8 @@ class AESXOR256 : public Nan::ObjectWrap {
 		// decryptBlock
 		// ------------
 		/**
-		 * @brief Decrypts the given cipher using AES in GCM mode to provide 
-		 *        confidentiality and authenticity using the given key resulting 
+		 * @brief Decrypts the given cipher using AES in GCM mode to provide
+		 *        confidentiality and authenticity using the given key resulting
 		 *        in the message block.
 		 *
 		 * @param message byte container for the resulting decrypted message
@@ -147,8 +148,8 @@ class AESXOR256 : public Nan::ObjectWrap {
 		 *
 		 * @return void
 		 */
-	 	void decryptBlock(std::vector<uint8_t>& message, 
-	 		const std::vector<uint8_t>& key, 
+	 	void decryptBlock(std::vector<uint8_t>& message,
+	 		const std::vector<uint8_t>& key,
 	 		const std::vector<uint8_t>& cipher);
 
 
@@ -156,31 +157,34 @@ class AESXOR256 : public Nan::ObjectWrap {
 		// xorRandomData
 		// -------------
 		/**
-		 * @brief XORs the given input container with requal number of random 
+		 * @brief XORs the given input container with requal number of random
 		 *        bytes obtained using the PCG random number generator.
 		 *
 		 * @param output byte container for the resulting XOR'd output
-		 * @param input byte container for the input data to be XOR'd with 
+		 * @param input byte container for the input data to be XOR'd with
 		 *		  random bytes
 		 *
 		 * @return void
 		 */
-	 	void xorRandomData(std::vector<uint8_t>& output, const std::vector<uint8_t>& input);
+	 	void xorRandomData(
+			std::vector<uint8_t>& output,
+			const std::vector<uint8_t>& input
+		);
 
 
 		// ---
 		// New
 		// ---
 	    /**
-		 * @brief Creates the wrapped object and corresponding underlying 
+		 * @brief Creates the wrapped object and corresponding underlying
 		 * 		  object with provided arguments - seed buffer
 		 *
 		 * Invoked as:
-		 * 'var obj = new AESXOR256(seed)' or 
-		 * 'var obj = AESXOR256(seed)'
+		 * 'let obj = new AESXOR256(seed)' or
+		 * 'let obj = AESXOR256(seed)'
 		 * 'seed' is a buffer containing bytes representing the uint64 pcg seed
 		 *
-		 * @param info node.js arguments wrapper containing seed buffer and 
+		 * @param info node.js arguments wrapper containing seed buffer and
 		 *		  block size
 		 *
 		 * @return void
@@ -192,18 +196,18 @@ class AESXOR256 : public Nan::ObjectWrap {
 		// encrypt
 		// -------
 		/**
-		 * @brief Unwraps the arguments to get the AES encryption key and 
-		 * 		  message, and encrypts the message to return 
+		 * @brief Unwraps the arguments to get the AES encryption key and
+		 * 		  message, and encrypts the message to return
 		 *		  the cipher.
 		 *
 		 * Invoked as:
-		 * 'var cipher = obj.encrypt(key, message)' 
+		 * 'let cipher = obj.encrypt(key, message)'
 		 * 'key' is the buffer containing the AES key
 		 * 'message' is the buffer containing the message to be encrypted
 		 * 'cipher' is the buffer containing the encrypted cipher
  		 * PreCondition: key buffer size == AESNODE_DEFAULT_KEY_LENGTH_BYTES
  		 *
-		 * @param info node.js arguments wrapper for AES key and message to be 
+		 * @param info node.js arguments wrapper for AES key and message to be
 		 *		  encrypted
 		 *
 		 * @return void
@@ -215,18 +219,18 @@ class AESXOR256 : public Nan::ObjectWrap {
 		// decrypt
 		// -------
 		/**
-		 * @brief Unwraps the arguments to get the AES decryption key and  
-		 * 		  cipher, and decrypts the cipher to return the 
+		 * @brief Unwraps the arguments to get the AES decryption key and
+		 * 		  cipher, and decrypts the cipher to return the
 		 *		  original message.
 		 *
 		 * Invoked as:
-		 * 'var message = obj.decrypt(key, cipher)' 
+		 * 'let message = obj.decrypt(key, cipher)'
 		 * 'key' is the buffer containing the AES key
 		 * 'cipher' is the buffer containing the cipher to be decrypted
 		 * 'message' is the buffer containing the original decypted message
  		 * PreCondition: key buffer size == AESNODE_DEFAULT_KEY_LENGTH_BYTES
  		 *
-		 * @param info node.js arguments wrapper for AES key and cipher to be 
+		 * @param info node.js arguments wrapper for AES key and cipher to be
 		 *		  decrypted
 		 *
 		 * @return void
@@ -239,7 +243,7 @@ class AESXOR256 : public Nan::ObjectWrap {
 		// Init
 		// ----
 		/**
-		 * @brief Initialization function for node.js object wrapper exported  
+		 * @brief Initialization function for node.js object wrapper exported
 		 * 		  by the addon.
 		 *
 		 * @param exports node.js module exports
@@ -248,7 +252,7 @@ class AESXOR256 : public Nan::ObjectWrap {
 		 */
     	static void Init(v8::Handle<v8::Object> exports);
 
-    	
+
 };
 
 #endif

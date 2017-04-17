@@ -4,27 +4,27 @@
  *
  *  @author Aashish Sheshadri
  *  @author Rohit Harchandani
- *  
+ *
  *  The MIT License (MIT)
- *  
- *  Copyright (c) 2015 PayPal
- *  
+ *
+ *  Copyright (c) 2015, 2016, 2017 PayPal
+ *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
- *  of this software and associated documentation files (the "Software"), to 
- *  deal in the Software without restriction, including without limitation the 
- *  rights to use, copy, modify, merge, publish, distribute, sublicense, and/or 
+ *  of this software and associated documentation files (the "Software"), to
+ *  deal in the Software without restriction, including without limitation the
+ *  rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
  *  sell copies of the Software, and to permit persons to whom the Software is
  *  furnished to do so, subject to the following conditions:
- *  
+ *
  *  The above copyright notice and this permission notice shall be included in
  *  all copies or substantial portions of the Software.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  *  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  *  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  *  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING 
- *  FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER  
+ *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ *  FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  *  DEALINGS IN THE SOFTWARE.
  */
 
@@ -44,9 +44,9 @@
 // -----------------
 // cryptopp includes
 // -----------------
-#include <cryptopp/hex.h>
+#include "hex.h"
 
-#include <cryptopp/filters.h>
+#include "filters.h"
 using CryptoPP::StringSink;
 using CryptoPP::StringSource;
 using CryptoPP::ArraySink;
@@ -54,57 +54,53 @@ using CryptoPP::ArraySource;
 using CryptoPP::PK_EncryptorFilter;
 using CryptoPP::PK_DecryptorFilter;
 
-#include <cryptopp/pubkey.h>
-using CryptoPP::PublicKey;
-using CryptoPP::PrivateKey;
-
-#include <cryptopp/eccrypto.h>
-using CryptoPP::ECP; 
+#include "eccrypto.h"
+using CryptoPP::ECP;
 using CryptoPP::ECIES;
 using CryptoPP::ECPPoint;
 using CryptoPP::DL_GroupParameters_EC;
 using CryptoPP::DL_FixedBasePrecomputation;
 
-#include <cryptopp/pubkey.h>
+#include "pubkey.h"
 using CryptoPP::DL_PrivateKey_EC;
 using CryptoPP::DL_PublicKey_EC;
 
-#include <cryptopp/asn.h>
-#include <cryptopp/oids.h>
+#include "asn.h"
+#include "oids.h"
 namespace ASN1 = CryptoPP::ASN1;
 
-#include <cryptopp/cryptlib.h>
+#include "cryptlib.h"
 
-#include <cryptopp/sha3.h>
+#include "sha3.h"
 using CryptoPP::SHA3_256;
 
-#include <cryptopp/osrng.h>
+#include "osrng.h"
 using CryptoPP::AutoSeededRandomPool;
 
 
 // ----------------
 // library includes
 // ----------------
-#include "eccisaac.h"
+#include "seifecc.h"
 #include "util.h"
 
-namespace {  
+namespace {
     // Strings represnting names of files to be stored to the disk.
     // rng state file name
-    const std::string RNG_STATE_FILE_NAME = ".ecies.rng"; 
+    const std::string RNG_STATE_FILE_NAME = ".ecies.rng";
     // private key file name
-    const std::string PRIV_KEY_FILE_NAME = ".ecies.private.key";
+    const std::string PRIV_KEY_FILE_NAME = "ecies.private.key";
     // public key file name
-    const std::string PUB_KEY_FILE_NAME = ".ecies.public.key";
+    const std::string PUB_KEY_FILE_NAME = "ecies.public.key";
 }
 
 // javascript object constructor
-Nan::Persistent<v8::Function> ECCISAAC::constructor; 
+Nan::Persistent<v8::Function> SEIFECC::constructor;
 
 // Helper functions for printing the public and private keys.
-void PrintPrivateKey(const DL_PrivateKey_EC<ECP>& key, 
+void PrintPrivateKey(const DL_PrivateKey_EC<ECP>& key,
     std::ostream& out = std::cout);
-void PrintPublicKey(const DL_PublicKey_EC<ECP>& key, 
+void PrintPublicKey(const DL_PublicKey_EC<ECP>& key,
     std::ostream& out = std::cout);
 
 
@@ -123,32 +119,32 @@ void PrintPublicKey(const DL_PublicKey_EC<ECP>& key,
 void PrintPrivateKey(const DL_PrivateKey_EC<ECP>& key, std::ostream& out) {
 
     const std::ios_base::fmtflags flags = out.flags();
-    
+
     // Group parameters
     const DL_GroupParameters_EC<ECP>& params = key.GetGroupParameters();
     // Base precomputation
-    const DL_FixedBasePrecomputation<ECPPoint>& bpc = 
+    const DL_FixedBasePrecomputation<ECPPoint>& bpc =
         params.GetBasePrecomputation();
     // Public Key (just do the exponentiation)
-    const ECPPoint point = bpc.Exponentiate(params.GetGroupPrecomputation(), 
+    const ECPPoint point = bpc.Exponentiate(params.GetGroupPrecomputation(),
         key.GetPrivateExponent());
-    
-    out << "Modulus: " << std::hex << 
+
+    out << "Modulus: " << std::hex <<
         params.GetCurve().GetField().GetModulus() << std::endl;
     out << "Cofactor: " << std::hex << params.GetCofactor() << std::endl;
-    
+
     out << "Coefficients" << std::endl;
     out << "  A: " << std::hex << params.GetCurve().GetA() << std::endl;
     out << "  B: " << std::hex << params.GetCurve().GetB() << std::endl;
-    
+
     out << "Base Point" << std::endl;
     out << "  x: " << std::hex << params.GetSubgroupGenerator().x << std::endl;
     out << "  y: " << std::hex << params.GetSubgroupGenerator().y << std::endl;
-    
+
     out << "Public Point" << std::endl;
     out << "  x: " << std::hex << point.x << std::endl;
     out << "  y: " << std::hex << point.y << std::endl;
-    
+
     out << "Private Exponent (multiplicand): " << std::endl;
     out << "  " << std::hex << key.GetPrivateExponent() << std::endl;
 
@@ -172,24 +168,24 @@ void PrintPrivateKey(const DL_PrivateKey_EC<ECP>& key, std::ostream& out) {
 void PrintPublicKey(const DL_PublicKey_EC<ECP>& key, std::ostream& out)
 {
     const std::ios_base::fmtflags flags = out.flags();
-    
+
     // Group parameters
     const DL_GroupParameters_EC<ECP>& params = key.GetGroupParameters();
     // Public key
     const ECPPoint& point = key.GetPublicElement();
-    
-    out << "Modulus: " << std::hex << 
+
+    out << "Modulus: " << std::hex <<
         params.GetCurve().GetField().GetModulus() << std::endl;
     out << "Cofactor: " << std::hex << params.GetCofactor() << std::endl;
-    
+
     out << "Coefficients" << std::endl;
     out << "  A: " << std::hex << params.GetCurve().GetA() << std::endl;
     out << "  B: " << std::hex << params.GetCurve().GetB() << std::endl;
-    
+
     out << "Base Point" << std::endl;
     out << "  x: " << std::hex << params.GetSubgroupGenerator().x << std::endl;
     out << "  y: " << std::hex << params.GetSubgroupGenerator().y << std::endl;
-    
+
     out << "Public Point" << std::endl;
     out << "  x: " << std::hex << point.x << std::endl;
     out << "  y: " << std::hex << point.y << std::endl;
@@ -207,17 +203,17 @@ void PrintPublicKey(const DL_PublicKey_EC<ECP>& key, std::ostream& out)
  * Constructor
  * @brief Initilizes and constructs internal data.
  *
- * @param initCallback callback to be invoked after async 
- *        operation 
- * @param key disk access key for public/private keys and 
- *        rng state 
+ * @param initCallback callback to be invoked after async
+ *        operation
+ * @param key disk access key for public/private keys and
+ *        rng state
  * @param folderPath folder containing keys and rng state files
  */
-ECCISAAC::Worker::Worker(
-    Nan::Callback* initCallback, 
-    const std::vector<uint8_t>& key, 
+SEIFECC::Worker::Worker(
+    Nan::Callback* initCallback,
+    const std::vector<uint8_t>& key,
     const std::string& folderPath
-): Nan::AsyncWorker(initCallback), 
+): Nan::AsyncWorker(initCallback),
 _wfolderPath(folderPath),
 _wkey(key) {
 
@@ -230,41 +226,41 @@ _wkey(key) {
 // ----------------
 /**
  * @brief Executed when the async work is complete without
- *        error, this function will be run inside the main event  
- *        loop, invoking the given callback with the loaded 
+ *        error, this function will be run inside the main event
+ *        loop, invoking the given callback with the loaded
  *        keys as an argument.
  *
- * The keys are returned as the second argument to the callback  
+ * The keys are returned as the second argument to the callback
  * {enc: [publicKey], dec: [privateKey]}
  *
  * @return void
  */
-void ECCISAAC::Worker::HandleOKCallback () {
+void SEIFECC::Worker::HandleOKCallback () {
     Nan::HandleScope scope;
 
-    /* Creating js status object with 'code' set as the status code(0) and 
+    /* Creating js status object with 'code' set as the status code(0) and
      * 'message' as "Success".
      */
     v8::Local<v8::Object> status = Nan::New<v8::Object>();
-    Nan::Set(status, 
-        Nan::New<v8::String>("code").ToLocalChecked(), 
+    Nan::Set(status,
+        Nan::New<v8::String>("code").ToLocalChecked(),
         Nan::New<v8::Integer>(0)
     );
-    Nan::Set(status, 
-        Nan::New<v8::String>("message").ToLocalChecked(), 
+    Nan::Set(status,
+        Nan::New<v8::String>("message").ToLocalChecked(),
         Nan::New<v8::String>("Success").ToLocalChecked()
     );
 
-    /* Creating js object with 'enc' set as the public key and 
+    /* Creating js object with 'enc' set as the public key and
      * 'dec' as the private key.
      */
     v8::Local<v8::Object> ret = Nan::New<v8::Object>();
-    Nan::Set(ret, 
-        Nan::New<v8::String>("enc").ToLocalChecked(), 
+    Nan::Set(ret,
+        Nan::New<v8::String>("enc").ToLocalChecked(),
         Nan::New<v8::String>(_encodedPub).ToLocalChecked()
     );
-    Nan::Set(ret, 
-        Nan::New<v8::String>("dec").ToLocalChecked(), 
+    Nan::Set(ret,
+        Nan::New<v8::String>("dec").ToLocalChecked(),
         Nan::New<v8::String>(_encodedPriv).ToLocalChecked()
     );
 
@@ -281,34 +277,34 @@ void ECCISAAC::Worker::HandleOKCallback () {
 // -------------------
 /**
  * @brief Executed when the async work is complete with
- *        error, this function will be run inside the main event  
- *        loop, invoking the given callback with the 
+ *        error, this function will be run inside the main event
+ *        loop, invoking the given callback with the
  *        corresponding error.
  *
- * The error is returned as the first argument to the callback 
+ * The error is returned as the first argument to the callback
  * {code: [statusCode], message: [errorMessage]}
  *
  * @return void
  */
-void ECCISAAC::Worker::HandleErrorCallback () {
+void SEIFECC::Worker::HandleErrorCallback () {
     Nan::HandleScope scope;
 
-    /* Creating js error object with 'code' set as the status code and 
+    /* Creating js error object with 'code' set as the status code and
      * 'message' as the error message.
      */
     v8::Local<v8::Object> error = Nan::New<v8::Object>();
-    Nan::Set(error, 
-        Nan::New<v8::String>("code").ToLocalChecked(), 
+    Nan::Set(error,
+        Nan::New<v8::String>("code").ToLocalChecked(),
         Nan::New<v8::Integer>((int)_status)
     );
-    Nan::Set(error, 
-        Nan::New<v8::String>("message").ToLocalChecked(), 
+    Nan::Set(error,
+        Nan::New<v8::String>("message").ToLocalChecked(),
         Nan::New<v8::String>(ErrorMessage()).ToLocalChecked()
     );
 
     // Invoke callback with the above error object and undefined keys.
     v8::Local<v8::Value> argv[] = {error, Nan::Undefined()};
-    
+
     callback->Call(2, argv);
 }
 
@@ -318,27 +314,27 @@ void ECCISAAC::Worker::HandleErrorCallback () {
 // Execute
 // -------
 /**
- * @brief Executed in a separate thread, asynchronously loading 
- *        the public/private keys from the disk and 
- *        communicating the status of the operation via the 
+ * @brief Executed in a separate thread, asynchronously loading
+ *        the public/private keys from the disk and
+ *        communicating the status of the operation via the
  *        Worker class.
  *
  * @return void
  */
-void ECCISAAC::Worker::Execute() {
-                    
+void SEIFECC::Worker::Execute() {
+
     try {
         // Try to load keys from the disk into the string arguments.
-        _status = ECCISAAC::loadKeys(
-            _encodedPub, 
-            _encodedPriv, 
-            _wkey, 
+        _status = SEIFECC::loadKeys(
+            _encodedPub,
+            _encodedPriv,
+            _wkey,
             _wfolderPath
         );
-        
+
         if (_status == STATUS::SUCCESS) {
             return;
-        } 
+        }
 
         // In case of error set the error message with appropriate message.
         if (_status == STATUS::FILE_NOT_FOUND) {
@@ -350,7 +346,7 @@ void ECCISAAC::Worker::Execute() {
         }
         return;
 
-    } catch (...) { 
+    } catch (...) {
         // Exception thrown while loading keys.
         SetErrorMessage("Unknown Error");
         return;
@@ -366,11 +362,11 @@ void ECCISAAC::Worker::Execute() {
  * Constructor
  * @brief Initilizes and constructs internal data.
  *
- * @param keyData byte vector corresponding to disk access key 
+ * @param keyData byte vector corresponding to disk access key
  * @param folderPath folder containing the encrypted keys
  */
-ECCISAAC::ECCISAAC(
-    const std::vector<uint8_t>& keyData, 
+SEIFECC::SEIFECC(
+    const std::vector<uint8_t>& keyData,
     const std::string& folderPath
 ): _key(keyData), _folderPath(folderPath) {
 
@@ -382,21 +378,21 @@ ECCISAAC::ECCISAAC(
 // SavePrivateKey
 // --------------
 /**
- * @brief Encrypt and save the private key to the disk with the given 
+ * @brief Encrypt and save the private key to the disk with the given
  *        file name.
  *
  * @param privateKey private key object
  * @param file file name of encrypted private key
- * @param key disk access key for public/private keys and 
- *        rng state 
+ * @param key disk access key for public/private keys and
+ *        rng state
  * @param folderPath folder containing keys and rng state files
  *
  * @return void
  */
-void ECCISAAC::SavePrivateKey(
-    const PrivateKey& privateKey, 
-    const std::string& file, 
-    const std::vector<uint8_t>& key, 
+void SEIFECC::SavePrivateKey(
+    const PrivateKey& privateKey,
+    const std::string& file,
+    const std::vector<uint8_t>& key,
     const std::string& folderPath
 )
 {
@@ -419,21 +415,21 @@ void ECCISAAC::SavePrivateKey(
 // SavePublicKey
 // -------------
 /**
- * @brief Encrypt and save the public key to the disk with the given 
+ * @brief Encrypt and save the public key to the disk with the given
  *        file name.
  *
  * @param publicKey public key object
  * @param file file name of encrypted public key
- * @param key disk access key for public/private keys and 
- *        rng state 
+ * @param key disk access key for public/private keys and
+ *        rng state
  * @param folderPath folder containing keys and rng state files
  *
  * @return void
  */
-void ECCISAAC::SavePublicKey(
-    const PublicKey& publicKey, 
-    const std::string& file, 
-    const std::vector<uint8_t>& key, 
+void SEIFECC::SavePublicKey(
+    const PublicKey& publicKey,
+    const std::string& file,
+    const std::vector<uint8_t>& key,
     const std::string& folderPath
 )
 {
@@ -457,37 +453,37 @@ void ECCISAAC::SavePublicKey(
 // LoadPrivateKey
 // --------------
 /**
- * @brief Decrypt the file with the given name and load it as the 
+ * @brief Decrypt the file with the given name and load it as the
  *        private key.
  *
  * @param privateKey private key object
  * @param file file name of encrypted private key
- * @param key disk access key for public/private keys and 
- *        rng state 
+ * @param key disk access key for public/private keys and
+ *        rng state
  * @param folderPath folder containing keys and rng state files
  *
  * @return status code indicating success or cause of error
  */
-ECCISAAC::STATUS ECCISAAC::LoadPrivateKey(
-    PrivateKey& privateKey, 
-    const std::string& file, 
-    const std::vector<uint8_t>& key, 
+SEIFECC::STATUS SEIFECC::LoadPrivateKey(
+    PrivateKey& privateKey,
+    const std::string& file,
+    const std::vector<uint8_t>& key,
     const std::string& folderPath
-) 
+)
 {
     // Create file decryptor object.
     FileCryptopp fileDecryptor(folderPath + file);
 
     // If private key file does not exist then return appropriate error.
     if (!fileDecryptor.fileExists()) {
-        return ECCISAAC::STATUS::FILE_NOT_FOUND;
+        return SEIFECC::STATUS::FILE_NOT_FOUND;
     }
 
     // Read the encrypted file to get the private key string.
     std::stringstream fss;
     if (!fileDecryptor.readFile(fss, key)) {
         // If decryption fails return an error.
-        return ECCISAAC::STATUS::DECRYPTION_ERROR;
+        return SEIFECC::STATUS::DECRYPTION_ERROR;
     }
 
     std::string keyStr = fss.str();
@@ -497,7 +493,7 @@ ECCISAAC::STATUS ECCISAAC::LoadPrivateKey(
 
     privateKey.Load(keySource);
 
-    return ECCISAAC::STATUS::SUCCESS;
+    return SEIFECC::STATUS::SUCCESS;
 }
 
 
@@ -505,47 +501,47 @@ ECCISAAC::STATUS ECCISAAC::LoadPrivateKey(
 // LoadPublicKey
 // -------------
 /**
- * @brief Decrypt the file with the given name and load it as the 
+ * @brief Decrypt the file with the given name and load it as the
  *        public key.
  *
  * @param publicKey public key object
  * @param file file name of encrypted public key
- * @param key disk access key for public/private keys and 
- *        rng state 
+ * @param key disk access key for public/private keys and
+ *        rng state
  * @param folderPath folder containing keys and rng state files
  *
  * @return status code indicating success or cause of error
  */
-ECCISAAC::STATUS ECCISAAC::LoadPublicKey(
-    PublicKey& publicKey, 
-    const std::string& file, 
-    const std::vector<uint8_t>& key, 
+SEIFECC::STATUS SEIFECC::LoadPublicKey(
+    PublicKey& publicKey,
+    const std::string& file,
+    const std::vector<uint8_t>& key,
     const std::string& folderPath
-) 
+)
 {
     // Create file decryptor object.
     FileCryptopp fileDecryptor(folderPath + file);
 
     // If public key file does not exist then return appropriate error.
     if (!fileDecryptor.fileExists()) {
-        return ECCISAAC::STATUS::FILE_NOT_FOUND;
+        return SEIFECC::STATUS::FILE_NOT_FOUND;
     }
 
     // Read the encrypted file to get the public key string.
     std::stringstream fss;
     if (!fileDecryptor.readFile(fss, key)) {
         // If decryption fails return an error.
-        return ECCISAAC::STATUS::DECRYPTION_ERROR;
+        return SEIFECC::STATUS::DECRYPTION_ERROR;
     }
 
     std::string keyStr = fss.str();
 
     // Use CryptoPP StringSource to get the public key object from the string.
     StringSource keySource(keyStr, true);
-    
+
     publicKey.Load(keySource);
 
-    return ECCISAAC::STATUS::SUCCESS;
+    return SEIFECC::STATUS::SUCCESS;
 }
 
 
@@ -554,33 +550,33 @@ ECCISAAC::STATUS ECCISAAC::LoadPublicKey(
 // loadKeys
 // --------
 /**
- * @brief Loads the keys by decrypting existing files and initializes 
+ * @brief Loads the keys by decrypting existing files and initializes
  *        the random number generator.
  *
  * @param encodedPub public key to be loaded from encrypted file
  * @param encodedPriv private key to be loaded from encrypted file
- * @param key disk access key for public/private keys and 
- *        rng state 
+ * @param key disk access key for public/private keys and
+ *        rng state
  * @param folderPath folder containing keys and rng state files
  *
  * @return status code indicating success or cause of error
  */
-ECCISAAC::STATUS ECCISAAC::loadKeys(
-    std::string& encodedPub, 
-    std::string& encodedPriv, 
-    const std::vector<uint8_t>& key, 
+SEIFECC::STATUS SEIFECC::loadKeys(
+    std::string& encodedPub,
+    std::string& encodedPriv,
+    const std::vector<uint8_t>& key,
     const std::string& folderPath
-) 
+)
 {
     // ECC Decryption object containing the private key.
     ECIES<ECP>::Decryptor d0;
-    
+
     // Load the private key from encrypted file on disk.
-    ECCISAAC::STATUS rc;
-    if ((rc = LoadPrivateKey(d0.AccessPrivateKey(), PRIV_KEY_FILE_NAME, 
-                             key, folderPath)) 
-        != ECCISAAC::STATUS::SUCCESS) {
-        /* If loading the key fails return the error which could be due to 
+    SEIFECC::STATUS rc;
+    if ((rc = LoadPrivateKey(d0.AccessPrivateKey(), PRIV_KEY_FILE_NAME,
+                             key, folderPath))
+        != SEIFECC::STATUS::SUCCESS) {
+        /* If loading the key fails return the error which could be due to
          * the file not being present on the disk or due to a decryption error.
          */
         return rc;
@@ -590,16 +586,16 @@ ECCISAAC::STATUS ECCISAAC::loadKeys(
     ECIES<ECP>::Encryptor e0;
 
     // Load the public key from encrypted file on disk.
-    if ((rc = LoadPublicKey(e0.AccessPublicKey(), PUB_KEY_FILE_NAME, 
-                            key, folderPath)) 
-        != ECCISAAC::STATUS::SUCCESS) {
-        /* If loading the key fails return the error which could be due to 
+    if ((rc = LoadPublicKey(e0.AccessPublicKey(), PUB_KEY_FILE_NAME,
+                            key, folderPath))
+        != SEIFECC::STATUS::SUCCESS) {
+        /* If loading the key fails return the error which could be due to
          * the file not being present on the disk or due to a decryption error.
          */
         return rc;
-    }  
+    }
 
-    /* Get the string versions of the keys from the encryption and decryption 
+    /* Get the string versions of the keys from the encryption and decryption
      * objects using CryptoPP StringSink.
      */
     std::string pubStr, privStr;
@@ -608,22 +604,22 @@ ECCISAAC::STATUS ECCISAAC::loadKeys(
     d0.GetPrivateKey().Save(privSs);
 
     // Hex encode the string keys using CryptoPP StringSource and HexEncoder.
-    StringSource ss1(pubStr, true, 
+    StringSource ss1(pubStr, true,
         new CryptoPP::HexEncoder(new StringSink(encodedPub)));
- 
-    StringSource ss2(privStr, true, 
+
+    StringSource ss2(privStr, true,
         new CryptoPP::HexEncoder(new StringSink(encodedPriv)));
 
     // Hash the hex encoded private key string using CryptoPP SHA3_256.
     std::vector<uint8_t> digest(CryptoPP::SHA3_256::DIGESTSIZE);
     hashString(digest, encodedPriv);
-    
+
     // Using the default file name for the RNG saved state.
     std::string fileName = RNG_STATE_FILE_NAME;
 
     std::string fileId = folderPath + fileName;
 
-    return ECCISAAC::STATUS::SUCCESS;
+    return SEIFECC::STATUS::SUCCESS;
 }
 
 
@@ -631,23 +627,23 @@ ECCISAAC::STATUS ECCISAAC::loadKeys(
 // generateKeys
 // ------------
 /**
- * @brief Initialize the RNG and use it to generate the public and 
+ * @brief Initialize the RNG and use it to generate the public and
  *        private keys, encrypt them and save to disk.
  *
  * @param encodedPub public key to be generated
  * @param encodedPriv private key to be generated
- * @param key disk access key for public/private keys and 
- *        rng state 
+ * @param key disk access key for public/private keys and
+ *        rng state
  * @param folderPath folder containing keys and rng state files
  *
  * @return boolean indicating success/failure
  */
-bool ECCISAAC::generateKeys(
-    std::string& encodedPub, 
-    std::string& encodedPriv, 
-    const std::vector<uint8_t>& key, 
+bool SEIFECC::generateKeys(
+    std::string& encodedPub,
+    std::string& encodedPriv,
+    const std::vector<uint8_t>& key,
     const std::string& folderPath
-) 
+)
 {
     // Using the default file name for the RNG saved state.
     std::string fileName = RNG_STATE_FILE_NAME;
@@ -655,9 +651,9 @@ bool ECCISAAC::generateKeys(
     std::string fileId = folderPath + fileName;
 
     IsaacRandomPool prng;
-    
-    /* Initialize the global Isaac rng object and check if 
-     * initialization succeeded. if it fails, increase the multiplier argument 
+
+    /* Initialize the global Isaac rng object and check if
+     * initialization succeeded. if it fails, increase the multiplier argument
      * which causes more data to be collected to get higher entropy.
      */
     int multiplier = 0;
@@ -687,7 +683,7 @@ bool ECCISAAC::generateKeys(
     // ECC Encryption object corresponding to the above decryptor object.
     ECIES<ECP>::Encryptor e0(d0);
 
-    /* Generate the private and public keys using our Isaac RNG and 
+    /* Generate the private and public keys using our Isaac RNG and
      * save them to encrypted files on the disk in the given folder.
      */
     try {
@@ -706,10 +702,10 @@ bool ECCISAAC::generateKeys(
     d0.GetPrivateKey().Save(privSs);
 
     // Hex encode the string keys using CryptoPP StringSource and HexEncoder.
-    StringSource ss1(pubStr, true, 
+    StringSource ss1(pubStr, true,
         new CryptoPP::HexEncoder(new StringSink(encodedPub)));
 
-    StringSource ss2(privStr, true, 
+    StringSource ss2(privStr, true,
         new CryptoPP::HexEncoder(new StringSink(encodedPriv)));
 
     return true;
@@ -723,26 +719,26 @@ bool ECCISAAC::generateKeys(
 // New
 // ---
 /**
- * @brief Creates the node object and corresponding underlying object 
- *        with provided arguments - disk access key and folder 
+ * @brief Creates the node object and corresponding underlying object
+ *        with provided arguments - disk access key and folder
  *        containing the encrypted keys.
  *
  * Invoked as:
- * 'var obj = new ECCISAAC(diskKey, folder)' or 
- * 'var obj = ECCISAAC(diskKey, folder)' where
+ * 'let obj = new SEIFECC(diskKey, folder)' or
+ * 'let obj = SEIFECC(diskKey, folder)' where
  * 'diskKey' is the key used to encrypt the keys and rng state
  * 'folder' is the folder where the keys and rng state are saved on disk
  *
- * @param info node.js arguments wrapper containing the disk access key 
+ * @param info node.js arguments wrapper containing the disk access key
  *        and folder path
  *
- * @return 
+ * @return
  */
-NAN_METHOD(ECCISAAC::New) {
+NAN_METHOD(SEIFECC::New) {
 
     if (info.IsConstructCall()) {
 
-        // Invoked as constructor: 'var obj = new ECCISAAC()'.
+        // Invoked as constructor: 'let obj = new SEIFECC()'.
 
         // Check arguments.
         if (!node::Buffer::HasInstance(info[0])) {
@@ -752,32 +748,32 @@ NAN_METHOD(ECCISAAC::New) {
             return;
         }
 
-        /* Unwrap the first argument to get the key buffer used to store 
+        /* Unwrap the first argument to get the key buffer used to store
          * RNG state to the disk.
          */
-        v8::Local<v8::Object> bufferObj = 
+        v8::Local<v8::Object> bufferObj =
             Nan::To<v8::Object>(info[0]).ToLocalChecked();
-        
+
         uint8_t* bufferData = (uint8_t*)node::Buffer::Data(bufferObj);
         size_t bufferLength = node::Buffer::Length(bufferObj);
 
-        /* If the size of key buffer is less than AES key size then hash the  
+        /* If the size of key buffer is less than AES key size then hash the
          * given data to get key of the required size.
          */
         std::vector<uint8_t> digest;
         if (bufferLength < 32) {
             digest.resize(CryptoPP::SHA3_256::DIGESTSIZE);
-            std::string bufferString(reinterpret_cast<const char*>(bufferData), 
-                reinterpret_cast<const char*>(bufferData) + bufferLength); 
+            std::string bufferString(reinterpret_cast<const char*>(bufferData),
+                reinterpret_cast<const char*>(bufferData) + bufferLength);
             hashString(digest, bufferString);
 
         } else {
             digest.reserve(CryptoPP::SHA3_256::DIGESTSIZE);
-            std::copy(bufferData, bufferData + bufferLength, 
+            std::copy(bufferData, bufferData + bufferLength,
                 std::back_inserter(digest));
         }
 
-        /* Unwrap the second argument to get the folder on disk where the RNG 
+        /* Unwrap the second argument to get the folder on disk where the RNG
          * state and keys will be encrypted and stored.
          */
         std::string folder = "./";
@@ -790,14 +786,14 @@ NAN_METHOD(ECCISAAC::New) {
         }
 
         // Create the wrapped object using the disk access key and given folder.
-        ECCISAAC* obj = new ECCISAAC(digest, folder);
+        SEIFECC* obj = new SEIFECC(digest, folder);
 
         obj->Wrap(info.This());
         info.GetReturnValue().Set(info.This());
 
     } else {
 
-        // Invoked as plain function `ECCISAAC(...)`, turn into construct call.
+        // Invoked as plain function `SEIFECC(...)`, turn into construct call.
         const int argc = info.Length();
 
         // Creating argument array for construct call.
@@ -809,7 +805,7 @@ NAN_METHOD(ECCISAAC::New) {
 
         v8::Local<v8::Function> cons = Nan::New<v8::Function>(constructor);
         info.GetReturnValue().Set(cons->NewInstance(argc, argv.data()));
-    
+
     }
 }
 
@@ -820,13 +816,13 @@ NAN_METHOD(ECCISAAC::New) {
 // loadKeys
 // --------
 /**
- * @brief Creates an async worker to load keys from the disk and 
- *        invokes the callback function with the error object (if 
+ * @brief Creates an async worker to load keys from the disk and
+ *        invokes the callback function with the error object (if
  *        applicable) and/or the object containing the keys.
  *
  * Invoked as:
  * 'obj.loadKeys(function(status, keys){})' where
- * 'status' (if applicable) is of the form: 
+ * 'status' (if applicable) is of the form:
  * {code: [statusCode], message: [statusMessage]}
  * 'keys' (if available) is of the form:
  * {enc: [publicKey], dec: [privateKey]}
@@ -835,18 +831,18 @@ NAN_METHOD(ECCISAAC::New) {
  *
  * @return void
  */
-NAN_METHOD(ECCISAAC::loadKeys) {
+NAN_METHOD(SEIFECC::loadKeys) {
 
     // Get a reference to the wrapped object from the argument.
-    ECCISAAC* obj = ObjectWrap::Unwrap<ECCISAAC>(info.Holder());
+    SEIFECC* obj = ObjectWrap::Unwrap<SEIFECC>(info.Holder());
 
     // Unwrap the first argument to get given callback function.
     Nan::Callback *callback = new Nan::Callback(info[0].As<v8::Function>());
 
     // Initialize the async worker and queue it.
     Worker* worker = new Worker(
-        callback, 
-        obj->_key, 
+        callback,
+        obj->_key,
         obj->_folderPath
     );
 
@@ -854,16 +850,41 @@ NAN_METHOD(ECCISAAC::loadKeys) {
 }
 
 
+// ---------------
+// entropyStrength
+// ---------------
+
+/**
+ * @brief Returns the possible strength of entropy avaible for mining.
+ *
+ * @return A string with values "WEAK", "MEDIUM" or "STRONG". If the only
+ *		   source of entropy is the OS this makes the module's strength
+ *		   WEAK w.r.t entropy, access to either the microphone or camera
+ *		   results in Medium strength and finally access to the OS, camera,
+ *		   microphone and more enables STRONG strength.
+ */
+NAN_METHOD(SEIFECC::entropyStrength) {
+    // Get a reference to the wrapped object from the argument.
+    SEIFECC* obj = ObjectWrap::Unwrap<SEIFECC>(info.Holder());
+
+    std::string strength = obj->prng.EntropyStrength();
+    // Return strength of underlying RNG used for key generation.
+    info.GetReturnValue().Set(
+        v8::String::NewFromUtf8(Nan::GetCurrentContext()->GetIsolate(),
+        strength.c_str())
+    );
+}
+
 
 // ------------
 // generateKeys
 // ------------
 /**
- * @brief Initializes the isaac RNG and uses it to generate the 
+ * @brief Initializes the isaac RNG and uses it to generate the
  *        public/private keys and return them to the caller.
  *
  * Invoked as:
- * 'var keys = obj.generateKeys()' where
+ * 'let keys = obj.generateKeys()' where
  * 'keys' (if available) is of the form:
  * {enc: [publicKey], dec: [privateKey]}
  *
@@ -871,17 +892,17 @@ NAN_METHOD(ECCISAAC::loadKeys) {
  *
  * @return void
  */
-NAN_METHOD(ECCISAAC::generateKeys) {
+NAN_METHOD(SEIFECC::generateKeys) {
 
     // Get a reference to the wrapped object from the argument.
-    ECCISAAC* obj = ObjectWrap::Unwrap<ECCISAAC>(info.Holder());
+    SEIFECC* obj = ObjectWrap::Unwrap<SEIFECC>(info.Holder());
 
     // Generate the public and private keys as strings and save them to disk.
     std::string encodedPub, encodedPriv;
     if (!obj->generateKeys(
-            encodedPub, 
+            encodedPub,
             encodedPriv,
-            obj->_key, 
+            obj->_key,
             obj->_folderPath
         )
     ) {
@@ -889,15 +910,15 @@ NAN_METHOD(ECCISAAC::generateKeys) {
         return;
     }
 
-    /* Creating js object with 'enc' set as the public key and 
+    /* Creating js object with 'enc' set as the public key and
      * 'dec' as the private key.
      */
     v8::Local<v8::Object> ret = Nan::New<v8::Object>();
-    Nan::Set(ret, 
-        Nan::New<v8::String>("enc").ToLocalChecked(), 
+    Nan::Set(ret,
+        Nan::New<v8::String>("enc").ToLocalChecked(),
         Nan::New<v8::String>(encodedPub).ToLocalChecked());
-    Nan::Set(ret, 
-        Nan::New<v8::String>("dec").ToLocalChecked(), 
+    Nan::Set(ret,
+        Nan::New<v8::String>("dec").ToLocalChecked(),
         Nan::New<v8::String>(encodedPriv).ToLocalChecked());
 
     // Set the above object as the value to be returned to node.js.
@@ -910,21 +931,21 @@ NAN_METHOD(ECCISAAC::generateKeys) {
 // encrypt
 // -------
 /**
- * @brief Unwraps the arguments to get the public key and message and 
+ * @brief Unwraps the arguments to get the public key and message and
  *        encrypt the message using the public key to return the cipher.
  *
  * Invoked as:
- * 'var cipher = obj.encrypt(key, message)' 
+ * 'let cipher = obj.encrypt(key, message)'
  * 'key' is the string containing the hex encoded ECC public key
  * 'message' is the buffer containing the message to be encrypted
  * 'cipher' is the string containing the encrypted cipher
  *
- * @param info node.js arguments wrapper containing public key string 
+ * @param info node.js arguments wrapper containing public key string
  *        and message
  *
  * @return void
  */
-NAN_METHOD(ECCISAAC::encrypt) {
+NAN_METHOD(SEIFECC::encrypt) {
 
     // Check arguments.
     if (info[0]->IsUndefined()) {
@@ -938,31 +959,30 @@ NAN_METHOD(ECCISAAC::encrypt) {
         return;
     }
 
-    ECCISAAC* obj = ObjectWrap::Unwrap<ECCISAAC>(info.Holder());
-    
+    SEIFECC* obj = ObjectWrap::Unwrap<SEIFECC>(info.Holder());
+
     // Unwrap the first argument to get the hex encoded public key string.
     v8::String::Utf8Value str(info[0]->ToString());
     std::string pubStr(*str);
 
     // Unwrap the second argument to get the message buffer to be encrypted.
-    v8::Local<v8::Object> bufferObj = 
+    v8::Local<v8::Object> bufferObj =
             Nan::To<v8::Object>(info[1]).ToLocalChecked();
-        
+
     uint8_t* messageData = (uint8_t*)node::Buffer::Data(bufferObj);
     size_t messageLength = node::Buffer::Length(bufferObj);
 
-    // string containing hex encoded encrypted cipher
-    std::string encoded;
-
+    // Vector containing hex encoded encrypted cipher.
+    std::vector<uint8_t> enc;
     try {
-        /* Hex decode the string to get the public key string using 
+        /* Hex decode the string to get the public key string using
          * CryptoPP StringSource and HexDecoder and store in 'em'.
          */
         std::string em;
-        StringSource ss0(pubStr, true, 
+        StringSource ss0(pubStr, true,
             new CryptoPP::HexDecoder(new StringSink(em)));
 
-        /* This decoded string can now be converted to public key object wrapped 
+        /* This decoded string can now be converted to public key object wrapped
          * in the ECC encryption object using StringSource.
          */
         ECIES<ECP>::Encryptor e1;
@@ -970,17 +990,29 @@ NAN_METHOD(ECCISAAC::encrypt) {
         e1.AccessPublicKey().Load(ss);
 
         AutoSeededRandomPool prng;
-    
-        /* Apply the CryptoPP PK_EncryptorFilter transformer to encrypt the  
-         * message buffer; store the result in a string 'em0' using ArraySource.
+
+        /* Apply the CryptoPP PK_EncryptorFilter transformer to encrypt the
+         * message buffer; store the result in a vector 'em0' using ArraySource.
          */
         std::string em0;
-        ArraySource ss1 (messageData, messageLength, true, 
-            new PK_EncryptorFilter(prng, e1, new StringSink(em0) ) );
+        ArraySource ss1 (
+            messageData,
+            messageLength,
+            true,
+            new PK_EncryptorFilter(
+                prng,
+                e1,
+                new StringSink(em0)
+            )
+        );
 
+        enc.resize(em0.size());
         // Hex encode the string cipher using CryptoPP StringSource & HexEncoder
-        StringSource ss6(em0, true, 
-            new CryptoPP::HexEncoder(new StringSink(encoded)));
+        StringSource ss6(
+            em0,
+            true,
+            new ArraySink(enc.data(), enc.size())
+        );
 
     } catch (const std::exception& ex) {
         Nan::ThrowError(ex.what());
@@ -991,8 +1023,15 @@ NAN_METHOD(ECCISAAC::encrypt) {
     }
 
     // Set the encoded cipher output as the value to be returned to node.js.
-    info.GetReturnValue().Set(
-        Nan::New<v8::String>(encoded.c_str()).ToLocalChecked());
+    // info.GetReturnValue().Set(
+    //     Nan::New<v8::String>(encoded.c_str()).ToLocalChecked());
+
+    // Copy cipherData vector into a node.js buffer.
+    auto slowBuffer = Nan::CopyBuffer((const char*)enc.data(),
+        enc.size()).ToLocalChecked();
+
+    // Set node.js buffer as return value of the function
+    info.GetReturnValue().Set(slowBuffer);
 }
 
 
@@ -1000,77 +1039,76 @@ NAN_METHOD(ECCISAAC::encrypt) {
 // decrypt
 // -------
 /**
- * @brief Unwraps the arguments to get private key and cipher and  
- *        decrypt the cipher using the private key to return the 
+ * @brief Unwraps the arguments to get private key and cipher and
+ *        decrypt the cipher using the private key to return the
  *        original message.
  *
  * Invoked as:
- * 'var message = obj.decrypt(key, cipher)' 
+ * 'let message = obj.decrypt(key, cipher)'
  * 'key' is the string containing the hex encoded ECC private key
  * 'cipher' is the string containing the cipher to be decrypted
  * 'message' is the buffer containing the decrypted message
  *
- * @param info node.js arguments wrapper containing private key string 
+ * @param info node.js arguments wrapper containing private key string
  *        and cipher.
  *
  * @return void
  */
-NAN_METHOD(ECCISAAC::decrypt) {
+NAN_METHOD(SEIFECC::decrypt) {
 
     // Check arguments.
     if (info[0]->IsUndefined()) {
         Nan::ThrowError("Incorrect Arguments. Missing Public key string");
         return;
     }
-    
-    if (info[1]->IsUndefined()) {
-        Nan::ThrowError("Incorrect Arguments. Missing encrypted cipher string");
+
+    if (info[1]->IsUndefined() || !node::Buffer::HasInstance(info[1])) {
+        Nan::ThrowError("Incorrect Arguments. Missing encrypted cipher buffer");
         return;
     }
 
-    ECCISAAC* obj = ObjectWrap::Unwrap<ECCISAAC>(info.Holder());
+    SEIFECC* obj = ObjectWrap::Unwrap<SEIFECC>(info.Holder());
 
     // Unwrap the first argument to get the hex encoded private key string.
     v8::String::Utf8Value str(info[0]->ToString());
     std::string privStr(*str);
 
-    // Unwrap the second argument to get the hex encoded cipher string.
-    v8::String::Utf8Value cipherStr(info[1]->ToString());
-    std::string encodedCipher(*cipherStr);
+    // Unwrap the second argument to get the cipher buffer.
+    v8::Local<v8::Object> bufferObj1 =
+                Nan::To<v8::Object>(info[1]).ToLocalChecked();
+    uint8_t* cipherData = (uint8_t *)node::Buffer::Data(bufferObj1);
+    size_t cipherLength = node::Buffer::Length(bufferObj1);
 
     // string containing decrypted string message
     std::string dm0;
-    
+
     try {
-    
-        /* Hex decode the string to get the private key string using 
+
+        /* Hex decode the string to get the private key string using
          * CryptoPP StringSource and HexDecoder and store it in string 'em'.
          */
         std::string em;
-        StringSource ss0(privStr, true, 
+        StringSource ss0(privStr, true,
             new CryptoPP::HexDecoder(new StringSink(em)));
 
-        /* This decoded string can now be converted to private key object  
+        /* This decoded string can now be converted to private key object
          * wrapped in the ECC decryption object using StringSource.
          */
         ECIES<ECP>::Decryptor d1;
         StringSource ss(em, true);
         d1.AccessPrivateKey().Load(ss);
-        
-        /* Hex decode the string to get the cipher string ('em0') to be 
-         * decrypted using CryptoPP StringSource and HexDecoder.
-         */
-        std::string em0;
-        StringSource ss6(encodedCipher, true, 
-            new CryptoPP::HexDecoder(new StringSink(em0)));
 
         AutoSeededRandomPool prng;
-    
-        /* Apply the CryptoPP PK_DecryptorFilter transformer to decrypt the  
-         * cipher string and store the result in a string using StringSource.
+
+        /* Apply the CryptoPP PK_DecryptorFilter transformer to decrypt the
+         * cipher buffer and store the result in a string using StringSink.
          */
-        StringSource ss2 (em0, true, 
-            new PK_DecryptorFilter(prng, d1, new StringSink(dm0) ) );
+        ArraySource ss6(
+            cipherData,
+            cipherLength,
+            true,
+            new PK_DecryptorFilter(prng, d1, new StringSink(dm0))
+        );
 
     } catch (const std::exception& ex) {
 
@@ -1084,7 +1122,7 @@ NAN_METHOD(ECCISAAC::decrypt) {
     }
 
     // Copy the decrypted string message into a node.js buffer.
-    auto slowBuffer = Nan::CopyBuffer((const char*)dm0.data(), 
+    auto slowBuffer = Nan::CopyBuffer((const char*)dm0.data(),
         dm0.size()).ToLocalChecked();
 
     // Set the buffer as the value to returned to node.js.
@@ -1096,32 +1134,31 @@ NAN_METHOD(ECCISAAC::decrypt) {
 // Init
 // ----
 /**
- * @brief Initialization function for node.js object wrapper exported  
+ * @brief Initialization function for node.js object wrapper exported
  *        by the addon.
  *
  * @param exports node.js module exports
  *
  * @return void
  */
-void ECCISAAC::Init(v8::Handle<v8::Object> exports) {
+void SEIFECC::Init(v8::Handle<v8::Object> exports) {
 
     Nan::HandleScope scope;
 
     // Prepare constructor template.
     v8::Local<v8::FunctionTemplate> tpl = Nan::New<v8::FunctionTemplate>(New);
-    tpl->SetClassName(Nan::New("ECCISAAC").ToLocalChecked());
-    tpl->InstanceTemplate()->SetInternalFieldCount(4);
+    tpl->SetClassName(Nan::New("SEIFECC").ToLocalChecked());
+    tpl->InstanceTemplate()->SetInternalFieldCount(5);
 
     // Prototype
     Nan::SetPrototypeMethod(tpl, "loadKeys", loadKeys);
+    Nan::SetPrototypeMethod(tpl, "entropyStrength", entropyStrength);
     Nan::SetPrototypeMethod(tpl, "generateKeys", generateKeys);
     Nan::SetPrototypeMethod(tpl, "encrypt", encrypt);
     Nan::SetPrototypeMethod(tpl, "decrypt", decrypt);
-    
+
     constructor.Reset(tpl->GetFunction());
 
     // Setting node.js module.exports.
-    exports->Set(Nan::New("ECCISAAC").ToLocalChecked(), tpl->GetFunction());
+    exports->Set(Nan::New("SEIFECC").ToLocalChecked(), tpl->GetFunction());
 }
-
-

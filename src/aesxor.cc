@@ -4,27 +4,27 @@
  *
  *  @author Aashish Sheshadri
  *  @author Rohit Harchandani
- * 
+ *
  *  The MIT License (MIT)
- *  
- *  Copyright (c) 2015 PayPal
- *  
+ *
+ *  Copyright (c) 2015, 2016, 2017 PayPal
+ *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
- *  of this software and associated documentation files (the "Software"), to 
- *  deal in the Software without restriction, including without limitation the 
- *  rights to use, copy, modify, merge, publish, distribute, sublicense, and/or 
+ *  of this software and associated documentation files (the "Software"), to
+ *  deal in the Software without restriction, including without limitation the
+ *  rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
  *  sell copies of the Software, and to permit persons to whom the Software is
  *  furnished to do so, subject to the following conditions:
- *  
+ *
  *  The above copyright notice and this permission notice shall be included in
  *  all copies or substantial portions of the Software.
- *  
+ *
  *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  *  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  *  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  *  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING 
- *  FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER  
+ *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ *  FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  *  DEALINGS IN THE SOFTWARE.
  */
 
@@ -46,14 +46,14 @@
 // -----------------
 // cryptopp includes
 // -----------------
-#include <cryptopp/filters.h>
+#include "filters.h"
 using CryptoPP::StringSink;
 using CryptoPP::StringSource;
 using CryptoPP::ArraySink;
 using CryptoPP::ArraySource;
-#include <cryptopp/modes.h>
-#include <cryptopp/aes.h>
-#include <cryptopp/gcm.h>
+#include "modes.h"
+#include "aes.h"
+#include "gcm.h"
 
 // ----------------
 // library includes
@@ -73,7 +73,7 @@ const int AESXOR256::AESNODE_DEFAULT_KEY_LENGTH_BYTES = 32;
 /**
  * @brief Convert uint64 array to an array of bytes.
  *
- * We traverse the input container from 'begin' to 'end' and store the 
+ * We traverse the input container from 'begin' to 'end' and store the
  * extracted bytes into 'out'
  *
  * @param begin beginning of container of uint64 values
@@ -87,8 +87,8 @@ void uInt64toBytes(II begin, II end, OI out) {
     // traverse bytes in uint64 values and store in 'out'
     while (begin != end) {
         for (int i = 0; i < 8; ++i) {
-            *out = static_cast<uint8_t> ( 
-                ((*begin) & ((0x00000000000000FF) << (8 * i))) >> (8 * i)
+            *out = static_cast<uint8_t> (
+                (*begin & (uint64_t(0x00000000000000FF) << (8 * i))) >> (8 * i)
             );
             ++out;
         }
@@ -112,7 +112,7 @@ uint64_t bytesToUInt64(uint8_t* bufferData, size_t bufferLength) {
     uint64_t returnVal = 0;
     int idx = 0;
 
-    while (bufferLength > 0) {
+    while (bufferLength > 0 && idx < 8) {
 
         returnVal = (returnVal << 8) + (uint8_t)bufferData[idx];
         idx = idx + 1;
@@ -129,16 +129,16 @@ uint64_t bytesToUInt64(uint8_t* bufferData, size_t bufferLength) {
 // -----------
 /**
  * Constructor
- * @brief Initializes the object including the PCG random number 
+ * @brief Initializes the object including the PCG random number
  *        generator using the provided seed and cipher block size.
  *
  * @param seed seed for pcg rng
  * @param blockSize aes encryption block size
  *
- * @return 
+ * @return
  */
-AESXOR256::AESXOR256(uint64_t seed): 
-    _rng(new pcg64_once_insecure(seed)) {
+AESXOR256::AESXOR256(std::vector<uint64_t> seed):
+    _rng(seed) {
 
 }
 
@@ -147,7 +147,7 @@ AESXOR256::AESXOR256(uint64_t seed):
 // getRandom
 // ---------
 /**
- * @brief Gets random uint64 values from pcg and stores them in a byte 
+ * @brief Gets random uint64 values from pcg and stores them in a byte
  *        array.
  *
  * @param random container for resulting random bytes
@@ -156,7 +156,7 @@ AESXOR256::AESXOR256(uint64_t seed):
  * @return void
  */
 void AESXOR256::getRandom(uint8_t* random, int len) {
-    /* Getting the number of random uint64 values required based on 
+    /* Getting the number of random uint64 values required based on
      * the number of bytes asked for.
      */
     int numRand = len % 8 == 0 ? len / 8 : len / 8 + 1;
@@ -164,10 +164,10 @@ void AESXOR256::getRandom(uint8_t* random, int len) {
     std::vector<uint64_t> randomVector(numRand);
 
     for (int i = 0; i < numRand; ++i) {
-        /* Getting random uint64 value from pcg random number generator 
+        /* Getting random uint64 value from pcg random number generator
          * using operator().
          */
-        randomVector[i] = (*_rng)();
+        randomVector[i] = _rng();
     }
 
     // Convert uint64 container to a byte array containing random values.
@@ -180,7 +180,7 @@ void AESXOR256::getRandom(uint8_t* random, int len) {
 // encryptBlock
 // ------------
 /**
- * @brief Encrypts the given message using AES in GCM mode to provide 
+ * @brief Encrypts the given message using AES in GCM mode to provide
  *        confidentiality and authenticity using the given key resulting
  *        in the cipher block.
  *
@@ -192,9 +192,9 @@ void AESXOR256::getRandom(uint8_t* random, int len) {
  *
  * @return void
  */
-void AESXOR256::encryptBlock(std::vector<uint8_t>& cipher, 
+void AESXOR256::encryptBlock(std::vector<uint8_t>& cipher,
     const std::vector<uint8_t>& key, const std::vector<uint8_t>& message) {
-    
+
     // initial vector (IV) for AES to XOR
     std::vector<uint8_t> iv(CryptoPP::AES::BLOCKSIZE);
 
@@ -206,15 +206,15 @@ void AESXOR256::encryptBlock(std::vector<uint8_t>& cipher,
 
     // Set AES Key and load IV.
     e.SetKeyWithIV(key.data(), key.size(), iv.data());
-    
-    /* Apply the Cryptopp AuthenticatedEncryptionFilter to the message buffer 
+
+    /* Apply the Cryptopp AuthenticatedEncryptionFilter to the message buffer
      * using ArraySource, to transform it into an encrypted string 'ciphertext'.
      */
     ArraySource ss1(
-        message.data(), 
+        message.data(),
         message.size(),
         true,
-        new CryptoPP::AuthenticatedEncryptionFilter(e, 
+        new CryptoPP::AuthenticatedEncryptionFilter(e,
             new StringSink( ciphertext )
         ) // AuthenticatedEncryptionFilter
     ); // ArraySource
@@ -226,8 +226,6 @@ void AESXOR256::encryptBlock(std::vector<uint8_t>& cipher,
         true,
         new ArraySink(cipher.data(), cipher.size())
     );
-
-
     return;
 }
 
@@ -236,8 +234,8 @@ void AESXOR256::encryptBlock(std::vector<uint8_t>& cipher,
 // decryptBlock
 // ------------
 /**
- * @brief Decrypts the given cipher using AES in GCM mode to provide 
- *        confidentiality and authenticity using the given key resulting 
+ * @brief Decrypts the given cipher using AES in GCM mode to provide
+ *        confidentiality and authenticity using the given key resulting
  *        in the message block.
  *
  * @param message byte container for the resulting decrypted message
@@ -248,7 +246,7 @@ void AESXOR256::encryptBlock(std::vector<uint8_t>& cipher,
  *
  * @return void
  */
-void AESXOR256::decryptBlock(std::vector<uint8_t>& message, 
+void AESXOR256::decryptBlock(std::vector<uint8_t>& message,
     const std::vector<uint8_t>& key, const std::vector<uint8_t>& cipher) {
 
     // initial vector (IV) for AES to XOR
@@ -256,25 +254,24 @@ void AESXOR256::decryptBlock(std::vector<uint8_t>& message,
 
     std::string decryptedtext; //store decrypted message
 
-
     // initialize AES
     CryptoPP::GCM< AES >::Decryption e;
 
     // Set AES Key and load IV.
     e.SetKeyWithIV(key.data(), key.size(), iv.data());
-    
-    /* Apply the Cryptopp AuthenticatedDecryptionFilter to the cipher buffer 
+
+    /* Apply the Cryptopp AuthenticatedDecryptionFilter to the cipher buffer
      * using ArraySource, to transform it into the decrypted string.
      */
     ArraySource ss1(
         cipher.data(),
         cipher.size(),
         true,
-        new CryptoPP::AuthenticatedDecryptionFilter(e, 
+        new CryptoPP::AuthenticatedDecryptionFilter(e,
             new StringSink( decryptedtext )
         ) // AuthenticatedDecryptionFilter
     ); // ArraySource
-    
+
     // Store the decrypted string into the message byte vector.
     message.resize(decryptedtext.size());
     StringSource ss2(
@@ -282,7 +279,6 @@ void AESXOR256::decryptBlock(std::vector<uint8_t>& message,
         true,
         new ArraySink(message.data(), message.size())
     );
-
 
     return;
 }
@@ -293,26 +289,26 @@ void AESXOR256::decryptBlock(std::vector<uint8_t>& message,
 // xorRandomData
 // -------------
 /**
- * @brief XORs the given input container with requal number of random 
+ * @brief XORs the given input container with requal number of random
  *        bytes obtained using the PCG random number generator.
  *
  * @param output byte container for the resulting XOR'd output
- * @param input byte container for the input data to be XOR'd with 
+ * @param input byte container for the input data to be XOR'd with
  *        random bytes
  *
  * @return void
  */
-void AESXOR256::xorRandomData(std::vector<uint8_t>& output, 
+void AESXOR256::xorRandomData(std::vector<uint8_t>& output,
     const std::vector<uint8_t>& input) {
 
     // Get PCG random bytes based on the size of the input vector.
     std::vector<uint8_t> random(input.size());
     getRandom(random.data(), random.size());
 
-    /* XOR the random bytes with the input vector and store the result in the 
+    /* XOR the random bytes with the input vector and store the result in the
      * output vector
      */
-    std::transform(input.begin(), input.begin() + input.size(), 
+    std::transform(input.begin(), input.begin() + input.size(),
         random.data(), output.begin(), std::bit_xor<uint8_t>());
 }
 
@@ -321,15 +317,15 @@ void AESXOR256::xorRandomData(std::vector<uint8_t>& output,
 // New
 // ---
 /**
- * @brief Creates the wrapped object and corresponding underlying 
+ * @brief Creates the wrapped object and corresponding underlying
  *        object with provided arguments - seed buffer and block size.
  *
  * Invoked as:
- * 'var obj = new AESXOR256(seed)' or 
- * 'var obj = AESXOR256(seed)'
+ * 'let obj = new AESXOR256(seed)' or
+ * 'let obj = AESXOR256(seed)'
  * 'seed' is a buffer containing bytes representing the uint64 pcg seed
  *
- * @param info node.js arguments wrapper containing seed buffer and 
+ * @param info node.js arguments wrapper containing seed buffer and
  *        block size
  *
  * @return void
@@ -338,7 +334,7 @@ NAN_METHOD(AESXOR256::New) {
 
     if (info.IsConstructCall()) {
         // Invoked as constructor: `new AESXOR256(...)`.
-        
+
         // Checking if first argument (seed) is a valid node.js buffer.
         if (!node::Buffer::HasInstance(info[0])) {
 
@@ -347,13 +343,15 @@ NAN_METHOD(AESXOR256::New) {
         }
 
         // Generating the uin64 seed from the node.js seed buffer.
-        v8::Local<v8::Object> bufferObj = 
+        v8::Local<v8::Object> bufferObj =
             Nan::To<v8::Object>(info[0]).ToLocalChecked();
-        
+
         uint8_t* bufferData = (uint8_t*)node::Buffer::Data(bufferObj);
         size_t bufferLength = node::Buffer::Length(bufferObj);
 
-        uint64_t seed = bytesToUInt64(bufferData, bufferLength);
+        std::vector<uint64_t> seed(2);
+        seed[0] = bytesToUInt64(bufferData, bufferLength);
+        seed[1] = bytesToUInt64(bufferData + 8, bufferLength);
 
         // Initializing the wrapped object with given seed.
         AESXOR256* obj = new AESXOR256(seed);
@@ -375,7 +373,7 @@ NAN_METHOD(AESXOR256::New) {
 
         v8::Local<v8::Function> cons = Nan::New<v8::Function>(constructor);
         info.GetReturnValue().Set(cons->NewInstance(argc, argv.data()));
-    
+
     }
 }
 
@@ -386,18 +384,18 @@ NAN_METHOD(AESXOR256::New) {
 // encrypt
 // -------
 /**
- * @brief Unwraps the arguments to get the AES encryption key and 
- *        message, and encrypts the message block by block to return 
+ * @brief Unwraps the arguments to get the AES encryption key and
+ *        message, and encrypts the message block by block to return
  *        the cipher.
  *
  * Invoked as:
- * 'var cipher = obj.encrypt(key, message)' 
+ * 'let cipher = obj.encrypt(key, message)'
  * 'key' is the buffer containing the AES key
  * 'message' is the buffer containing the message to be encrypted
  * 'cipher' is the buffer containing the encrypted cipher
  * PreCondition: key buffer size == AESNODE_DEFAULT_KEY_LENGTH_BYTES
  *
- * @param info node.js arguments wrapper for AES key and message to be 
+ * @param info node.js arguments wrapper for AES key and message to be
  *        encrypted
  *
  * @return void
@@ -407,8 +405,8 @@ NAN_METHOD(AESXOR256::encrypt) {
     AESXOR256* obj = ObjectWrap::Unwrap<AESXOR256>(info.Holder());
 
     // Checking arguments.
-    if (info.Length() < 2 
-        || !node::Buffer::HasInstance(info[0]) 
+    if (info.Length() < 2
+        || !node::Buffer::HasInstance(info[0])
         || !node::Buffer::HasInstance(info[1])) {
 
         Nan::ThrowError("Incorrect Arguments. Please provide buffers for 'key' "
@@ -416,10 +414,10 @@ NAN_METHOD(AESXOR256::encrypt) {
         return;
     }
 
-    /* Unwrap the first argument to get the AES key buffer and validate 
+    /* Unwrap the first argument to get the AES key buffer and validate
      * that the key length = AESNODE_DEFAULT_KEY_LENGTH_BYTES.
      */
-    v8::Local<v8::Object> bufferObj0 = 
+    v8::Local<v8::Object> bufferObj0 =
                 Nan::To<v8::Object>(info[0]).ToLocalChecked();
     uint8_t* keyData = (uint8_t *)node::Buffer::Data(bufferObj0);
     size_t keyLength = node::Buffer::Length(bufferObj0);
@@ -431,14 +429,14 @@ NAN_METHOD(AESXOR256::encrypt) {
     }
 
     // Unwrap the second argument to get the message buffer.
-    v8::Local<v8::Object> bufferObj1 = 
+    v8::Local<v8::Object> bufferObj1 =
                 Nan::To<v8::Object>(info[1]).ToLocalChecked();
     uint8_t* messageData = (uint8_t *)node::Buffer::Data(bufferObj1);
     size_t messageLength = node::Buffer::Length(bufferObj1);
-    
+
     // XOR random bytes with the given message buffer before encrypting it.
     std::vector<uint8_t> temp(messageLength);
-    obj->xorRandomData(temp, 
+    obj->xorRandomData(temp,
         std::vector<uint8_t>(messageData, messageData + messageLength)
     );
 
@@ -447,19 +445,19 @@ NAN_METHOD(AESXOR256::encrypt) {
     std::vector<uint8_t> cipherData;
     try {
 
-        obj->encryptBlock(cipherData, 
+        obj->encryptBlock(cipherData,
             std::vector<uint8_t>(keyData, keyData + keyLength), temp
         );
 
     } catch (const CryptoPP::Exception& e) {
-        
+
         // Throw an error to node.js in case of encryption errors.
         Nan::ThrowError(e.what());
         return;
     }
 
     // Copy cipherData vector into a node.js buffer.
-    auto slowBuffer = Nan::CopyBuffer((const char*)cipherData.data(), 
+    auto slowBuffer = Nan::CopyBuffer((const char*)cipherData.data(),
         cipherData.size()).ToLocalChecked();
 
     // Set node.js buffer as return value of the function
@@ -472,18 +470,18 @@ NAN_METHOD(AESXOR256::encrypt) {
 // decrypt
 // -------
 /**
- * @brief Unwraps the arguments to get the AES decryption key and  
- *        cipher, and decrypts the cipher block by block to return the 
+ * @brief Unwraps the arguments to get the AES decryption key and
+ *        cipher, and decrypts the cipher block by block to return the
  *        original message.
  *
  * Invoked as:
- * 'var message = obj.decrypt(key, cipher)' 
+ * 'let message = obj.decrypt(key, cipher)'
  * 'key' is the buffer containing the AES key
  * 'cipher' is the buffer containing the cipher to be decrypted
  * 'message' is the buffer containing the original decypted message
  * PreCondition: key buffer size == AESNODE_DEFAULT_KEY_LENGTH_BYTES
  *
- * @param info node.js arguments wrapper for AES key and cipher to be 
+ * @param info node.js arguments wrapper for AES key and cipher to be
  *        decrypted
  *
  * @return void
@@ -493,8 +491,8 @@ NAN_METHOD(AESXOR256::decrypt) {
     AESXOR256* obj = ObjectWrap::Unwrap<AESXOR256>(info.Holder());
 
     // Checking arguments.
-    if (info.Length() < 2 
-        || !node::Buffer::HasInstance(info[0]) 
+    if (info.Length() < 2
+        || !node::Buffer::HasInstance(info[0])
         || !node::Buffer::HasInstance(info[1])) {
 
         Nan::ThrowError("Incorrect Arguments. Please provide buffers for 'key' "
@@ -502,10 +500,10 @@ NAN_METHOD(AESXOR256::decrypt) {
         return;
     }
 
-    /* Unwrap the first argument to get the AES key buffer and validate 
+    /* Unwrap the first argument to get the AES key buffer and validate
      * that the key length = AESNODE_DEFAULT_KEY_LENGTH_BYTES.
      */
-    v8::Local<v8::Object> bufferObj0 = 
+    v8::Local<v8::Object> bufferObj0 =
                 Nan::To<v8::Object>(info[0]).ToLocalChecked();
     uint8_t* keyData = (uint8_t *)node::Buffer::Data(bufferObj0);
     size_t keyLength = node::Buffer::Length(bufferObj0);
@@ -517,7 +515,7 @@ NAN_METHOD(AESXOR256::decrypt) {
     }
 
     // Unwrap the second argument to get the message buffer.
-    v8::Local<v8::Object> bufferObj1 = 
+    v8::Local<v8::Object> bufferObj1 =
                 Nan::To<v8::Object>(info[1]).ToLocalChecked();
     uint8_t* cipherData = (uint8_t *)node::Buffer::Data(bufferObj1);
     size_t cipherLength = node::Buffer::Length(bufferObj1);
@@ -527,8 +525,8 @@ NAN_METHOD(AESXOR256::decrypt) {
     std::vector<uint8_t> temp;
     try {
 
-        obj->decryptBlock(temp, 
-            std::vector<uint8_t>(keyData, keyData + keyLength), 
+        obj->decryptBlock(temp,
+            std::vector<uint8_t>(keyData, keyData + keyLength),
             std::vector<uint8_t>(cipherData, cipherData + cipherLength)
         );
 
@@ -544,7 +542,7 @@ NAN_METHOD(AESXOR256::decrypt) {
     obj->xorRandomData(messageData, temp);
 
     // Copy messageData vector into a node.js buffer.
-    auto slowBuffer = Nan::CopyBuffer((const char*)messageData.data(), 
+    auto slowBuffer = Nan::CopyBuffer((const char*)messageData.data(),
         messageData.size()).ToLocalChecked();;
 
     // Set node.js buffer as return value of the function.
@@ -557,7 +555,7 @@ NAN_METHOD(AESXOR256::decrypt) {
 // Init
 // ----
 /**
- * @brief Initialization function for node.js object wrapper exported  
+ * @brief Initialization function for node.js object wrapper exported
  *        by the addon.
  *
  * @param exports node.js module exports
@@ -576,10 +574,9 @@ void AESXOR256::Init(v8::Handle<v8::Object> exports) {
     // Prototype
     Nan::SetPrototypeMethod(tpl, "encrypt", encrypt);
     Nan::SetPrototypeMethod(tpl, "decrypt", decrypt);
-    
+
     constructor.Reset(tpl->GetFunction());
 
     // Setting node.js module.exports.
     exports->Set(Nan::New("AESXOR256").ToLocalChecked(), tpl->GetFunction());
 }
-

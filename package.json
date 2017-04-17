@@ -15,6 +15,10 @@
         "glob": "*",
         "mocha": "*"
     },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/paypal/seifnode.git"
+    },
     "gypfile": true,
     "contributors": [{
         "name": "Aashish Sheshadri",
@@ -24,10 +28,6 @@
         "name": "Rohit Harchandani",
         "email": "harchu@gmail.com"
     }],
-    "repository": {
-        "type": "git",
-        "url": "https://github.com/paypal/seifnode.git"
-    },
     "engines": {
         "node": ">=6.9.2"
     },

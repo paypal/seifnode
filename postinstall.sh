@@ -7,5 +7,22 @@ if [[ "$unamestr" == "darwin" ]]; then
 fi
 
 if [[ "$unamestr" == "linux" ]]; then
-    patchelf --set-rpath $temp/deps/seifrng/lib $temp/build/Release/seifnode.node
+
+    patchelfCmd="patchelf"
+
+    if ! type patchelf > /dev/null; then
+        echo "patchelf not found; attempting to install locally."
+        cd deps/3rdParty
+        wget http://nixos.org/releases/patchelf/patchelf-0.9/patchelf-0.9.tar.bz2
+        tar xf patchelf-0.9.tar.bz2
+        rm patchelf-0.9.tar.bz2
+        cd patchelf-0.9/
+        ./configure
+        make
+        patchelfCmd=./src/patchelf
+    fi
+
+
+    eval $patchelfCmd --set-rpath $temp/deps/seifrng/lib $temp/build/Release/seifnode.node
+    cd $temp
 fi
