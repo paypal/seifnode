@@ -21,7 +21,7 @@ On Linux systems the node module requires [PatchELF](https://nixos.org/patchelf.
 Alternatively, to use the latest development version from Github:
 
 ```
-$ npm install <git-path>
+$ npm install https://github.com/paypal/seifnode.git
 ```
 
 Test
