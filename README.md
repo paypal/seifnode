@@ -272,7 +272,7 @@ Dependencies
 For generating cryptographically secure random numbers.
 
 **License:**
-https://github.com/paypal/seifrng/license.md
+https://github.com/paypal/seifrng/blob/master/LICENSE.md
 
 ### 2. [CryptoPP/Crypto++](https://www.cryptopp.com/)
 
